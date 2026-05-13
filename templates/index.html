@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV Scanner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap');
+  :root{--bg:#0a0a0a;--surface:#111;--border:#1e1e1e;--accent:#c8f135;--accent2:#35f1a0;--text:#f0f0f0;--muted:#555;--red:#ff4d4d}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;padding:24px}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(200,241,53,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(200,241,53,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  .container{max-width:800px;margin:0 auto;position:relative;z-index:1}
+  header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px}
+  .logo{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+  .logo span{color:var(--accent)}
+  .tagline{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:1px}
+  .status-pill{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:8px 14px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .dot.live{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .controls{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+  .controls button{flex:1;min-width:120px}
+  button{background:var(--accent);color:#0a0a0a;border:none;border-radius:10px;padding:12px 20px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:opacity 0.2s,transform 0.1s;white-space:nowrap}
+  button:hover{opacity:0.85}
+  button:active{transform:scale(0.97)}
+  button:disabled{opacity:0.4;cursor:not-allowed}
+  button.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+  .stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center}
+  .stat-card .val{font-size:24px;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
+  .stat-card .lbl{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:0.5px}
+  .bets-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .bets-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+  .last-updated{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+  .bets-list{display:flex;flex-direction:column;gap:10px}
+  .bet-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;animation:fadeIn 0.3s ease;transition:border-color 0.2s}
+  .bet-card:hover{border-color:#333}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .bet-game{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:6px}
+  .bet-pick{font-size:16px;font-weight:700;margin-bottom:6px;line-height:1.2}
+  .bet-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .badge{font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+  .badge.book{color:var(--accent2);border-color:rgba(53,241,160,0.2)}
+  .ev-display{text-align:right}
+  .ev-number{font-size:26px;font-weight:800;color:var(--accent);line-height:1;font-family:'Space Mono',monospace}
+  .ev-label{font-size:10px;color:var(--muted);text-align:right;margin-top:2px;font-family:'Space Mono',monospace}
+  .prob-bar-wrap{margin-top:8px;display:flex;align-items:center;gap:8px}
+  .prob-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+  .prob-fill{height:100%;background:var(--accent);border-radius:2px}
+  .prob-text{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+  .empty-state .icon{font-size:40px;margin-bottom:16px}
+  .empty-state h3{font-size:16px;font-weight:700;margin-bottom:8px;color:var(--text)}
+  .empty-state p{font-size:13px;line-height:1.6}
+  .loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error-msg{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.2);border-radius:12px;padding:16px 20px;font-family:'Space Mono',monospace;font-size:12px;color:var(--red);margin-bottom:16px}
+  @media(max-width:500px){body{padding:16px}.logo{font-size:22px}.ev-number{font-size:20px}.bet-card{grid-template-columns:1fr}.ev-display{text-align:left;display:flex;align-items:center;gap:8px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <div class="logo">EV<span>Scanner</span></div>
+      <div class="tagline">BETMGM · DRAFTKINGS · FANDUEL</div>
+    </div>
+    <div class="status-pill">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">OFFLINE</span>
+    </div>
+  </header>
+
+  <div class="controls">
+    <button onclick="runScan()" id="scanBtn">🔍 Scan Now</button>
+  </div>
+
+  <div class="error-msg" id="errorMsg" style="display:none"></div>
+
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-card"><div class="val" id="statTotal">0</div><div class="lbl">BETS FOUND</div></div>
+    <div class="stat-card"><div class="val" id="statBest">0%</div><div class="lbl">BEST EV</div></div>
+    <div class="stat-card"><div class="val" id="statScanned">0</div><div class="lbl">GAMES SCANNED</div></div>
+  </div>
+
+  <div id="betsSection" style="display:none">
+    <div class="bets-header">
+      <div class="bets-title">Live +EV Bets</div>
+      <div class="last-updated" id="lastUpdated"></div>
+    </div>
+    <div class="bets-list" id="betsList"></div>
+  </div>
+
+  <div class="loading" id="loadingEl" style="display:none">
+    <div class="spinner"></div>
+    <span>Scanning books...</span>
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="icon">📭</div>
+    <h3>No +EV bets right now</h3>
+    <p>Lines are sharp right now. Check back closer to game time.</p>
+  </div>
+</div>
+
+<script>
+const SERVER = "https://ev-bet.onrender.com";
+
+function setStatus(live){
+  document.getElementById("statusDot").className="dot"+(live?" live":"");
+  document.getElementById("statusText").textContent=live?"LIVE":"OFFLINE";
+}
+
+async function runScan(){
+  document.getElementById("scanBtn").disabled=true;
+  document.getElementById("loadingEl").style.display="flex";
+  document.getElementById("betsSection").style.display="none";
+  document.getElementById("emptyState").style.display="none";
+  document.getElementById("statsBar").style.display="none";
+  document.getElementById("errorMsg").style.display="none";
+
+  try{
+    const res = await fetch(SERVER+"/scan");
+    const data = await res.json();
+    const bets = data.bets||[];
+    const games = data.games||0;
+
+    document.getElementById("loadingEl").style.display="none";
+    document.getElementById("statsBar").style.display="grid";
+    document.getElementById("statTotal").textContent=bets.length;
+    document.getElementById("statBest").textContent=bets.length?bets[0].ev+"%":"0%";
+    document.getElementById("statScanned").textContent=games;
+    document.getElementById("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();
+    setStatus(true);
+
+    if(!bets.length){
+      document.getElementById("emptyState").style.display="block";
+    } else {
+      document.getElementById("betsSection").style.display="block";
+      const list=document.getElementById("betsList");
+      list.innerHTML="";
+      for(const bet of bets){
+        const oddsStr=bet.odds>0?`+${bet.odds}`:bet.odds;
+        const card=document.createElement("div");
+        card.className="bet-card";
+        card.innerHTML=`
+          <div>
+            <div class="bet-game">${bet.game}</div>
+            <div class="bet-pick">${bet.bet} <span style="color:var(--muted);font-size:14px">(${oddsStr})</span></div>
+            <div class="bet-meta">
+              <span class="badge book">${bet.book}</span>
+              <span class="badge">${bet.type}</span>
+            </div>
+            <div class="prob-bar-wrap">
+              <div class="prob-bar"><div class="prob-fill" style="width:${bet.trueProb}%"></div></div>
+              <span class="prob-text">${bet.trueProb}% true prob</span>
+            </div>
+          </div>
+          <div class="ev-display">
+            <div class="ev-number">+${bet.ev}%</div>
+            <div class="ev-label">EV</div>
+          </div>`;
+        list.appendChild(card);
+      }
+    }
+  } catch(err){
+    document.getElementById("loadingEl").style.display="none";
+    document.getElementById("errorMsg").style.display="block";
+    document.getElementById("errorMsg").textContent="Error: "+err.message;
+    setStatus(false);
+  }
+  document.getElementById("scanBtn").disabled=false;
+}
+
+runScan();
+</script>
+</body>
+</html>
