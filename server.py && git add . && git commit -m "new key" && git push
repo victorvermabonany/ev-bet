@@ -1,4 +1,9 @@
-import os
+3e5b743ec48cf85d6598ddbe25267bfc
+
+3e5b743ec48cf85d6598ddbe25267bfc
+
+
+
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -6,7 +11,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-API_KEY = os.environ.get("ODDS_API_KEY", "3e5b743ec48cf85d6598ddbe25267bfc")
+API_KEY = os.environ.get("ODDS_API_KEY", "9ce39f64955e8bb570296ec801076b2a")
 
 SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls", "americanfootball_nfl"]
 SHARP_BOOKS = ["pinnacle", "circa", "bookmaker", "betonlineag", "bovada", "betfair_ex_eu"]
