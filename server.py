@@ -1,6 +1,6 @@
 import os
 import requests
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -8,8 +8,8 @@ CORS(app)
 
 API_KEY = os.environ.get("ODDS_API_KEY", "9ce39f64955e8bb570296ec801076b2a")
 
-SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls"]
-SHARP_BOOKS = ["pinnacle", "circa", "bookmaker", "betonlineag", "bovada"]
+SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls", "americanfootball_nfl"]
+SHARP_BOOKS = ["pinnacle", "circa", "bookmaker", "betonlineag", "bovada", "betfair_ex_eu"]
 SOFT_BOOKS = ["betmgm", "draftkings", "fanduel"]
 BOOK_NAMES = {"betmgm": "BetMGM", "draftkings": "DraftKings", "fanduel": "FanDuel"}
 MARKETS = ["h2h", "spreads", "totals"]
@@ -36,6 +36,8 @@ def get_sharp_prob(bookmakers, market_key):
                 if not outcomes:
                     continue
                 total = sum(implied_prob(american_to_decimal(o["price"])) for o in outcomes)
+                if total == 0:
+                    continue
                 return {
                     (o.get("name", "") + str(o.get("point", ""))): implied_prob(american_to_decimal(o["price"])) / total
                     for o in outcomes
@@ -44,8 +46,8 @@ def get_sharp_prob(bookmakers, market_key):
 
 @app.route("/scan")
 def scan():
-    min_ev = 3.0
-    max_ev = 10.0
+    min_ev = float(request.args.get("min_ev", 3.0))
+    max_ev = float(request.args.get("max_ev", 10.0))
     all_bets = []
     total_games = 0
 
@@ -59,7 +61,7 @@ def scan():
                     "markets": market_key,
                     "oddsFormat": "american",
                 }
-                res = requests.get(url, params=params, timeout=10)
+                res = requests.get(url, params=params, timeout=15)
                 data = res.json()
                 if not isinstance(data, list):
                     continue
@@ -99,7 +101,7 @@ def scan():
                                         "ev": round(ev, 2),
                                     })
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Error {sport} {market_key}: {e}")
 
     seen = set()
     unique = []
