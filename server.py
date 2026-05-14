@@ -6,7 +6,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-API_KEY = "3e5b743ec48cf85d6598ddbe25267bfc"
+API_KEY = "YOURNEWKEY"
 
 SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls", "americanfootball_nfl"]
 SHARP_BOOKS = ["pinnacle", "circa", "bookmaker", "betonlineag", "bovada", "betfair_ex_eu"]
