@@ -8,10 +8,10 @@ CORS(app)
 
 API_KEY = "3e5b743ec48cf85d6598ddbe25267bfc"
 
-SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls"]
+SPORTS = ["basketball_nba", "baseball_mlb", "icehockey_nhl", "soccer_usa_mls", "americanfootball_nfl"]
 SHARP_BOOKS = ["pinnacle", "circa", "bookmaker", "betonlineag", "bovada", "betfair_ex_eu"]
-SOFT_BOOKS = ["betmgm", "draftkings", "fanduel"]
-BOOK_NAMES = {"betmgm": "BetMGM", "draftkings": "DraftKings", "fanduel": "FanDuel"}
+ALL_SOFT_BOOKS = ["betmgm","draftkings","fanduel","caesars","betrivers","espnbet","betparx","ballybet","hardrockbet","pointsbet","fliff","mybookieag"]
+BOOK_NAMES = {"betmgm":"BetMGM","draftkings":"DraftKings","fanduel":"FanDuel","caesars":"Caesars","betrivers":"BetRivers","espnbet":"ESPN Bet","betparx":"betPARX","ballybet":"Bally Bet","hardrockbet":"Hard Rock","pointsbet":"PointsBet","fliff":"Fliff","mybookieag":"MyBookie"}
 MARKETS = ["h2h", "spreads", "totals"]
 MARKET_LABELS = {"h2h": "ML", "spreads": "Spread", "totals": "Total"}
 
@@ -48,10 +48,17 @@ def get_sharp_prob(bookmakers, market_key):
 def index():
     return render_template("index.html")
 
+@app.route("/tracker")
+def tracker():
+    return render_template("tracker.html")
+
 @app.route("/scan")
 def scan():
     min_ev = float(request.args.get("min_ev", 3.0))
     max_ev = float(request.args.get("max_ev", 10.0))
+    books_param = request.args.get("books", "")
+    soft_books = books_param.split(",") if books_param else ALL_SOFT_BOOKS
+
     all_bets = []
     total_games = 0
 
@@ -78,7 +85,7 @@ def scan():
                     if not sharp_probs:
                         continue
                     for book in bookmakers:
-                        if book["key"] not in SOFT_BOOKS:
+                        if book["key"] not in soft_books:
                             continue
                         for market in book.get("markets", []):
                             if market["key"] != market_key:
@@ -121,7 +128,3 @@ def scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-@app.route("/tracker")
-def tracker():
-    return render_template("tracker.html")
