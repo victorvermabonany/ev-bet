@@ -1,0 +1,9 @@
+{
+  "appId": "com.victor.evbet",
+  "appName": "EV Bet",
+  "webDir": "static",
+  "server": {
+    "url": "https://ev-bet.onrender.com",
+    "cleartext": false
+  }
+}

@@ -3,61 +3,86 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="EV Bet">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <title>EV Scanner</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap');
-  :root{--bg:#0a0a0a;--surface:#111;--border:#1e1e1e;--accent:#c8f135;--accent2:#35f1a0;--text:#f0f0f0;--muted:#555;--red:#ff4d4d}
+  :root{--bg:#0a0a0a;--surface:#111;--surface2:#151515;--border:#242424;--accent:#c8f135;--accent2:#35f1a0;--text:#f0f0f0;--muted:#777;--red:#ff4d4d}
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;padding:24px}
   body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(200,241,53,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(200,241,53,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
-  .container{max-width:800px;margin:0 auto;position:relative;z-index:1}
-  header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px}
-  .logo{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+  .container{max-width:960px;margin:0 auto;position:relative;z-index:1}
+  header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:16px}
+  .logo{font-size:28px;font-weight:800;letter-spacing:0;line-height:1}
   .logo span{color:var(--accent)}
   .tagline{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:1px}
   .status-pill{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:8px 14px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
   .dot.live{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite}
+  .dot.warn{background:#ffc857;box-shadow:0 0 8px #ffc857}
+  .dot.offline{background:var(--red);box-shadow:0 0 8px rgba(255,77,77,0.5)}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-  .controls{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
-  .controls button{flex:1;min-width:120px}
-  button{background:var(--accent);color:#0a0a0a;border:none;border-radius:10px;padding:12px 20px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:opacity 0.2s,transform 0.1s;white-space:nowrap}
-  button:hover{opacity:0.85}
-  button:active{transform:scale(0.97)}
-  button:disabled{opacity:0.4;cursor:not-allowed}
-  button.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
-  .stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
+  nav{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
+  .nav-btn{background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;display:inline-block}
+  .nav-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .panel h3{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+  .controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+  .control-group{display:flex;flex-direction:column;gap:6px}
+  .control-group label{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:0.5px}
+  input[type=number]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Space Mono',monospace;font-size:12px;outline:none;width:100%}
+  input[type=number]:focus{border-color:var(--accent)}
+  .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:8px}
+  .check{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:'Space Mono',monospace;font-size:11px;color:var(--text);min-height:38px}
+  .check input{accent-color:var(--accent);width:15px;height:15px;flex:none}
+  .action-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{background:var(--accent);color:#0a0a0a;border:none;border-radius:10px;padding:12px 18px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:opacity 0.2s,transform 0.1s;white-space:nowrap}
+  button:hover{opacity:0.88}
+  button:active{transform:scale(0.98)}
+  button:disabled{opacity:0.45;cursor:not-allowed}
+  button.secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  button.small{padding:8px 10px;font-size:11px;border-radius:8px}
+  .toggle-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+  .toggle-row label{display:flex;align-items:center;gap:8px}
+  .toggle-row input{accent-color:var(--accent)}
+  .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
   .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center}
-  .stat-card .val{font-size:24px;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
+  .stat-card .val{font-size:23px;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
   .stat-card .lbl{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:0.5px}
-  .bets-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .bets-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap}
   .bets-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
   .last-updated{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
   .bets-list{display:flex;flex-direction:column;gap:10px}
-  .bet-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;animation:fadeIn 0.3s ease;transition:border-color 0.2s}
-  .bet-card:hover{border-color:#333}
+  .bet-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;animation:fadeIn 0.3s ease;transition:border-color 0.2s}
+  .bet-card:hover{border-color:#373737}
   @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   .bet-game{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:6px}
-  .bet-pick{font-size:16px;font-weight:700;margin-bottom:6px;line-height:1.2}
+  .bet-pick{font-size:16px;font-weight:700;margin-bottom:6px;line-height:1.25}
   .bet-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .badge{font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
   .badge.book{color:var(--accent2);border-color:rgba(53,241,160,0.2)}
-  .ev-display{text-align:right}
+  .ev-display{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
   .ev-number{font-size:26px;font-weight:800;color:var(--accent);line-height:1;font-family:'Space Mono',monospace}
   .ev-label{font-size:10px;color:var(--muted);text-align:right;margin-top:2px;font-family:'Space Mono',monospace}
   .prob-bar-wrap{margin-top:8px;display:flex;align-items:center;gap:8px}
   .prob-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
   .prob-fill{height:100%;background:var(--accent);border-radius:2px}
   .prob-text{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap}
-  .empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
-  .empty-state .icon{font-size:40px;margin-bottom:16px}
+  .empty-state{text-align:center;padding:46px 20px;color:var(--muted)}
   .empty-state h3{font-size:16px;font-weight:700;margin-bottom:8px;color:var(--text)}
   .empty-state p{font-size:13px;line-height:1.6}
-  .loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px}
+  .loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:36px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px}
   .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .error-msg{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.2);border-radius:12px;padding:16px 20px;font-family:'Space Mono',monospace;font-size:12px;color:var(--red);margin-bottom:16px}
-  @media(max-width:500px){body{padding:16px}.logo{font-size:22px}.ev-number{font-size:20px}.bet-card{grid-template-columns:1fr}.ev-display{text-align:left;display:flex;align-items:center;gap:8px}}
+  .error-msg{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.24);border-radius:12px;padding:14px 16px;font-family:'Space Mono',monospace;font-size:12px;color:var(--red);margin-bottom:16px;line-height:1.5}
+  .usage-note{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);line-height:1.5}
+  @media(max-width:760px){.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-bar{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){body{padding:16px}.logo{font-size:22px}.checks{grid-template-columns:1fr 1fr}.bet-card{grid-template-columns:1fr}.ev-display{text-align:left;align-items:flex-start}.controls{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -65,16 +90,76 @@
   <header>
     <div>
       <div class="logo">EV<span>Scanner</span></div>
-      <div class="tagline">BETMGM · DRAFTKINGS · FANDUEL</div>
+      <div class="tagline">BETMGM / DRAFTKINGS / FANDUEL</div>
     </div>
     <div class="status-pill">
-      <div class="dot" id="statusDot"></div>
-      <span id="statusText">OFFLINE</span>
+      <div class="dot warn" id="statusDot"></div>
+      <span id="statusText">READY</span>
     </div>
   </header>
 
-  <nav style="display:flex;gap:8px;margin-bottom:24px"><a href="/" style="background:var(--accent);color:#000;border-radius:10px;padding:10px 16px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;text-decoration:none">🔍 Scanner</a><a href="/tracker" style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;text-decoration:none">📊 Tracker</a></nav><div class="controls">
-    <button onclick="runScan()" id="scanBtn">🔍 Scan Now</button>
+  <nav>
+    <a href="/" class="nav-btn active">Scanner</a>
+    <a href="/tracker" class="nav-btn">Tracker</a>
+  </nav>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Scan Controls</h3>
+      <div class="usage-note" id="configStatus">Loading config...</div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>Min EV %</label>
+        <input type="number" id="minEv" value="3" step="0.5">
+      </div>
+      <div class="control-group">
+        <label>Max EV %</label>
+        <input type="number" id="maxEv" value="10" step="0.5">
+      </div>
+      <div class="control-group">
+        <label>Auto Scan</label>
+        <div class="check"><input type="checkbox" id="autoScan"> 30 minutes</div>
+      </div>
+      <div class="control-group">
+        <label>Alerts</label>
+        <button class="secondary" id="notifyBtn" onclick="toggleNotifications()">Enable Alerts</button>
+      </div>
+    </div>
+
+    <div class="panel-head">
+      <h3>Sports</h3>
+      <div class="toggle-row">
+        <button class="small secondary" onclick="setGroup('sportsBox', true)">All</button>
+        <button class="small secondary" onclick="setGroup('sportsBox', false)">None</button>
+      </div>
+    </div>
+    <div class="checks" id="sportsBox"></div>
+
+    <div class="panel-head" style="margin-top:16px">
+      <h3>Markets</h3>
+      <div class="toggle-row">
+        <button class="small secondary" onclick="setGroup('marketsBox', true)">All</button>
+        <button class="small secondary" onclick="setGroup('marketsBox', false)">None</button>
+      </div>
+    </div>
+    <div class="checks" id="marketsBox"></div>
+
+    <div class="panel-head" style="margin-top:16px">
+      <h3>Books</h3>
+      <div class="toggle-row">
+        <button class="small secondary" onclick="selectCoreBooks()">Core 3</button>
+        <button class="small secondary" onclick="setGroup('booksBox', true)">All</button>
+      </div>
+    </div>
+    <div class="checks" id="booksBox"></div>
+  </section>
+
+  <div class="action-row" style="margin-bottom:18px">
+    <button onclick="runScan(false)" id="scanBtn">Scan Cached Lines</button>
+    <button class="secondary" onclick="runScan(true)" id="freshBtn">Force Fresh Scan</button>
+    <div class="usage-note" id="usageNote">Cached scans reuse data for 5 minutes when available.</div>
   </div>
 
   <div class="error-msg" id="errorMsg" style="display:none"></div>
@@ -82,7 +167,8 @@
   <div class="stats-bar" id="statsBar" style="display:none">
     <div class="stat-card"><div class="val" id="statTotal">0</div><div class="lbl">BETS FOUND</div></div>
     <div class="stat-card"><div class="val" id="statBest">0%</div><div class="lbl">BEST EV</div></div>
-    <div class="stat-card"><div class="val" id="statScanned">0</div><div class="lbl">GAMES SCANNED</div></div>
+    <div class="stat-card"><div class="val" id="statScanned">0</div><div class="lbl">GAMES</div></div>
+    <div class="stat-card"><div class="val" id="statCalls">0</div><div class="lbl">API CALLS</div></div>
   </div>
 
   <div id="betsSection" style="display:none">
@@ -95,89 +181,355 @@
 
   <div class="loading" id="loadingEl" style="display:none">
     <div class="spinner"></div>
-    <span>Scanning books...</span>
+    <span>Scanning selected lines...</span>
   </div>
 
-  <div class="empty-state" id="emptyState" style="display:none">
-    <div class="icon">📭</div>
-    <h3>No +EV bets right now</h3>
-    <p>Lines are sharp right now. Check back closer to game time.</p>
+  <div class="empty-state" id="emptyState">
+    <h3>Ready to scan</h3>
+    <p>Pick the leagues and books you care about, then run a cached scan. Use fresh scans only when you need new lines.</p>
   </div>
 </div>
 
 <script>
-const SERVER = "https://ev-bet.onrender.com";
+const SERVER = window.location.origin;
+const CORE_BOOKS = ["betmgm", "draftkings", "fanduel"];
+const SEEN_KEY = "ev_seen_bets";
+let autoTimer = null;
+let config = null;
 
-function setStatus(live){
-  document.getElementById("statusDot").className="dot"+(live?" live":"");
-  document.getElementById("statusText").textContent=live?"LIVE":"OFFLINE";
+function setStatus(state){
+  const dot = document.getElementById("statusDot");
+  const text = document.getElementById("statusText");
+  dot.className = "dot";
+  if(state === "live"){
+    dot.classList.add("live");
+    text.textContent = "LIVE";
+  } else if(state === "offline"){
+    dot.classList.add("offline");
+    text.textContent = "OFFLINE";
+  } else {
+    dot.classList.add("warn");
+    text.textContent = "READY";
+  }
 }
 
-async function runScan(){
-  document.getElementById("scanBtn").disabled=true;
-  document.getElementById("loadingEl").style.display="flex";
-  document.getElementById("betsSection").style.display="none";
-  document.getElementById("emptyState").style.display="none";
-  document.getElementById("statsBar").style.display="none";
-  document.getElementById("errorMsg").style.display="none";
+function checkbox(id, item, checked){
+  const label = document.createElement("label");
+  label.className = "check";
+  label.innerHTML = `<input type="checkbox" value="${item.key}" ${checked ? "checked" : ""}> ${item.label}`;
+  document.getElementById(id).appendChild(label);
+}
+
+function hydrateChecks(id, items, selected){
+  const box = document.getElementById(id);
+  box.innerHTML = "";
+  for(const item of items) checkbox(id, item, selected.includes(item.key));
+}
+
+function setGroup(id, checked){
+  document.querySelectorAll(`#${id} input`).forEach(input => input.checked = checked);
+  savePrefs();
+}
+
+function selectCoreBooks(){
+  document.querySelectorAll("#booksBox input").forEach(input => input.checked = CORE_BOOKS.includes(input.value));
+  savePrefs();
+}
+
+function checkedValues(id){
+  return [...document.querySelectorAll(`#${id} input:checked`)].map(input => input.value);
+}
+
+function savePrefs(){
+  const prefs = {
+    sports: checkedValues("sportsBox"),
+    markets: checkedValues("marketsBox"),
+    books: checkedValues("booksBox"),
+    minEv: document.getElementById("minEv").value,
+    maxEv: document.getElementById("maxEv").value,
+    autoScan: document.getElementById("autoScan").checked
+  };
+  localStorage.setItem("ev_scanner_prefs", JSON.stringify(prefs));
+  scheduleAutoScan();
+}
+
+function getPrefs(){
+  try {
+    return JSON.parse(localStorage.getItem("ev_scanner_prefs") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+async function loadConfig(){
+  const fallback = {
+    apiConfigured: true,
+    cacheTtlSeconds: 300,
+    sports: [
+      {key:"basketball_nba", label:"NBA"},
+      {key:"baseball_mlb", label:"MLB"},
+      {key:"icehockey_nhl", label:"NHL"},
+      {key:"soccer_usa_mls", label:"MLS"},
+      {key:"americanfootball_nfl", label:"NFL"}
+    ],
+    markets: [
+      {key:"h2h", label:"ML"},
+      {key:"spreads", label:"Spread"},
+      {key:"totals", label:"Total"}
+    ],
+    books: [
+      {key:"betmgm", label:"BetMGM"},
+      {key:"draftkings", label:"DraftKings"},
+      {key:"fanduel", label:"FanDuel"}
+    ]
+  };
+
+  try {
+    const res = await fetch(`${SERVER}/config`);
+    config = await res.json();
+  } catch {
+    config = fallback;
+  }
+
+  const prefs = getPrefs();
+  document.getElementById("minEv").value = prefs.minEv || 3;
+  document.getElementById("maxEv").value = prefs.maxEv || 10;
+  document.getElementById("autoScan").checked = !!prefs.autoScan;
+
+  hydrateChecks("sportsBox", config.sports, prefs.sports || config.sports.map(sport => sport.key));
+  hydrateChecks("marketsBox", config.markets, prefs.markets || config.markets.map(market => market.key));
+  hydrateChecks("booksBox", config.books, prefs.books || CORE_BOOKS);
+
+  const ttlMinutes = Math.round((config.cacheTtlSeconds || 300) / 60);
+  document.getElementById("usageNote").textContent = `Cached scans reuse data for ${ttlMinutes} minutes when available.`;
+  document.getElementById("configStatus").textContent = config.apiConfigured ? "API key detected" : "API key missing";
+  if(!config.apiConfigured) setError("Missing Odds API key. Set ODDS_API_KEY in Render before scanning.");
+
+  document.querySelectorAll("input").forEach(input => input.addEventListener("change", savePrefs));
+  updateNotifyButton();
+  scheduleAutoScan();
+}
+
+function setError(message){
+  const el = document.getElementById("errorMsg");
+  el.style.display = message ? "block" : "none";
+  el.textContent = message || "";
+}
+
+function buildScanUrl(refresh){
+  const sports = checkedValues("sportsBox");
+  const markets = checkedValues("marketsBox");
+  const books = checkedValues("booksBox");
+  if(!sports.length || !markets.length || !books.length){
+    throw new Error("Select at least one sport, market, and book.");
+  }
+
+  const params = new URLSearchParams({
+    min_ev: document.getElementById("minEv").value || "3",
+    max_ev: document.getElementById("maxEv").value || "10",
+    sports: sports.join(","),
+    markets: markets.join(","),
+    books: books.join(",")
+  });
+  if(refresh) params.set("refresh", "1");
+  return `${SERVER}/scan?${params.toString()}`;
+}
+
+function formatUsage(data){
+  const usage = data.apiUsage || {};
+  const remaining = usage["x-requests-remaining"];
+  const used = usage["x-requests-used"];
+  const parts = [
+    `${data.requestCount || 0} API calls`,
+    `${data.cacheHits || 0} cache hits`
+  ];
+  if(remaining !== undefined) parts.push(`${remaining} remaining`);
+  if(used !== undefined) parts.push(`${used} used`);
+  return parts.join(" / ");
+}
+
+async function runScan(refresh){
+  savePrefs();
+  setError("");
+  setStatus("ready");
+  document.getElementById("scanBtn").disabled = true;
+  document.getElementById("freshBtn").disabled = true;
+  document.getElementById("loadingEl").style.display = "flex";
+  document.getElementById("betsSection").style.display = "none";
+  document.getElementById("emptyState").style.display = "none";
+  document.getElementById("statsBar").style.display = "none";
 
   try{
-    const res = await fetch(SERVER+"/scan");
+    const res = await fetch(buildScanUrl(refresh));
     const data = await res.json();
-    const bets = data.bets||[];
-    const games = data.games||0;
+    const bets = data.bets || [];
+    const games = data.games || 0;
 
-    document.getElementById("loadingEl").style.display="none";
-    document.getElementById("statsBar").style.display="grid";
-    document.getElementById("statTotal").textContent=bets.length;
-    document.getElementById("statBest").textContent=bets.length?bets[0].ev+"%":"0%";
-    document.getElementById("statScanned").textContent=games;
-    document.getElementById("lastUpdated").textContent="Updated "+new Date().toLocaleTimeString();
-    setStatus(true);
+    document.getElementById("loadingEl").style.display = "none";
+    document.getElementById("statsBar").style.display = "grid";
+    document.getElementById("statTotal").textContent = bets.length;
+    document.getElementById("statBest").textContent = bets.length ? bets[0].ev + "%" : "0%";
+    document.getElementById("statScanned").textContent = games;
+    document.getElementById("statCalls").textContent = data.requestCount || 0;
+    document.getElementById("lastUpdated").textContent = `Updated ${new Date().toLocaleTimeString()} / ${formatUsage(data)}`;
+    document.getElementById("usageNote").textContent = formatUsage(data);
 
-    if(!bets.length){
-      document.getElementById("emptyState").style.display="block";
-    } else {
-      document.getElementById("betsSection").style.display="block";
-      const list=document.getElementById("betsList");
-      list.innerHTML="";
-      for(const bet of bets){
-        const oddsStr=bet.odds>0?`+${bet.odds}`:bet.odds;
-        const card=document.createElement("div");
-        card.className="bet-card";
-        card.innerHTML=`
-          <div>
-            <div class="bet-game">${bet.game}</div>
-            <div class="bet-pick">${bet.bet} <span style="color:var(--muted);font-size:14px">(${oddsStr})</span></div>
-            <div class="bet-meta">
-              <span class="badge book">${bet.book}</span>
-              <span class="badge">${bet.type}</span>
-            </div>
-            <div class="prob-bar-wrap">
-              <div class="prob-bar"><div class="prob-fill" style="width:${bet.trueProb}%"></div></div>
-              <span class="prob-text">${bet.trueProb}% true prob</span>
-            </div>
-          </div>
-          <div class="ev-display">
-            <div class="ev-number">+${bet.ev}%</div>
-            <div class="ev-label">EV</div>
-          </div>`;
-        list.appendChild(card);
-      }
+    if(data.errors && data.errors.length){
+      setError(data.errors.slice(0, 4).join(" | "));
     }
+
+    setStatus(data.apiConfigured === false || (data.errors && data.errors.length && !bets.length) ? "offline" : "live");
+    renderBets(bets);
+    maybeNotify(bets);
   } catch(err){
-    document.getElementById("loadingEl").style.display="none";
-    document.getElementById("errorMsg").style.display="block";
-    document.getElementById("errorMsg").textContent="Error: "+err.message;
-    setStatus(false);
+    document.getElementById("loadingEl").style.display = "none";
+    setError("Error: " + err.message);
+    setStatus("offline");
   }
-  document.getElementById("scanBtn").disabled=false;
+
+  document.getElementById("scanBtn").disabled = false;
+  document.getElementById("freshBtn").disabled = false;
 }
 
-runScan();
+function renderBets(bets){
+  const list = document.getElementById("betsList");
+  list.innerHTML = "";
+
+  if(!bets.length){
+    document.getElementById("emptyState").style.display = "block";
+    document.getElementById("emptyState").querySelector("h3").textContent = "No +EV bets right now";
+    document.getElementById("emptyState").querySelector("p").textContent = "Try fewer filters or run a fresh scan closer to game time.";
+    return;
+  }
+
+  document.getElementById("betsSection").style.display = "block";
+  for(const bet of bets){
+    const oddsStr = bet.odds > 0 ? `+${bet.odds}` : bet.odds;
+    const card = document.createElement("div");
+    card.className = "bet-card";
+    card.innerHTML = `
+      <div>
+        <div class="bet-game">${escapeHtml(bet.sport || "")} / ${escapeHtml(bet.game)}</div>
+        <div class="bet-pick">${escapeHtml(bet.bet)} <span style="color:var(--muted);font-size:14px">(${oddsStr})</span></div>
+        <div class="bet-meta">
+          <span class="badge book">${escapeHtml(bet.book)}</span>
+          <span class="badge">${escapeHtml(bet.type)}</span>
+          <span class="badge">${escapeHtml(String(bet.trueProb))}% true prob</span>
+        </div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar"><div class="prob-fill" style="width:${Math.max(0, Math.min(100, bet.trueProb))}%"></div></div>
+          <span class="prob-text">${bet.trueProb}%</span>
+        </div>
+      </div>
+      <div class="ev-display">
+        <div>
+          <div class="ev-number">+${bet.ev}%</div>
+          <div class="ev-label">EV</div>
+        </div>
+      </div>`;
+
+    const logButton = document.createElement("button");
+    logButton.className = "secondary small";
+    logButton.textContent = "Log Bet";
+    logButton.addEventListener("click", () => openTracker(bet));
+    card.querySelector(".ev-display").appendChild(logButton);
+    list.appendChild(card);
+  }
+}
+
+function openTracker(bet){
+  const params = new URLSearchParams({
+    game: bet.game || "",
+    pick: `${bet.bet || ""}${bet.type && bet.type !== "ML" ? " (" + bet.type + ")" : ""}`,
+    book: bet.book || "",
+    odds: bet.odds || "",
+    ev: bet.ev || "",
+    trueProb: bet.trueProb || ""
+  });
+  window.location.href = `/tracker?${params.toString()}`;
+}
+
+function stableBetKey(bet){
+  return bet.key || `${bet.game}|${bet.bet}|${bet.type}|${bet.book}|${bet.odds}`;
+}
+
+function updateNotifyButton(){
+  const enabled = localStorage.getItem("ev_notifications") === "on";
+  document.getElementById("notifyBtn").textContent = enabled ? "Alerts On" : "Enable Alerts";
+}
+
+async function toggleNotifications(){
+  if(!("Notification" in window)){
+    setError("This browser does not support notifications.");
+    return;
+  }
+
+  if(Notification.permission === "default"){
+    await Notification.requestPermission();
+  }
+
+  if(Notification.permission === "granted"){
+    const next = localStorage.getItem("ev_notifications") === "on" ? "off" : "on";
+    localStorage.setItem("ev_notifications", next);
+  } else {
+    localStorage.setItem("ev_notifications", "off");
+    setError("Notifications are blocked in this browser.");
+  }
+  updateNotifyButton();
+}
+
+async function showAlert(title, options){
+  if("serviceWorker" in navigator){
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      registration.showNotification(title, options);
+      return;
+    } catch {}
+  }
+  new Notification(title, options);
+}
+
+function maybeNotify(bets){
+  if(localStorage.getItem("ev_notifications") !== "on" || !("Notification" in window) || Notification.permission !== "granted") return;
+
+  const seen = new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]"));
+  const fresh = bets.filter(bet => !seen.has(stableBetKey(bet))).slice(0, 3);
+  for(const bet of bets) seen.add(stableBetKey(bet));
+  localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-500)));
+
+  for(const bet of fresh){
+    const oddsStr = bet.odds > 0 ? `+${bet.odds}` : bet.odds;
+    showAlert(`+${bet.ev}% EV: ${bet.bet}`, {
+      body: `${bet.book} ${oddsStr} / ${bet.game}`,
+      tag: stableBetKey(bet),
+      icon: "/static/icon.svg",
+      data: { url: `/tracker?${new URLSearchParams({game: bet.game, pick: bet.bet, book: bet.book, odds: bet.odds, ev: bet.ev}).toString()}` }
+    });
+  }
+}
+
+function scheduleAutoScan(){
+  if(autoTimer) clearInterval(autoTimer);
+  if(document.getElementById("autoScan").checked){
+    autoTimer = setInterval(() => runScan(false), 1800000);
+  }
+}
+
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#039;"
+  }[char]));
+}
+
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("/static/service-worker.js").catch(() => {});
+}
+
+loadConfig();
 </script>
 </body>
 </html>
-<script>
-setInterval(runScan, 1800000);
-</script>
