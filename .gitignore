@@ -1,10 +1,6 @@
 .env
-.venv/
-venv/
-__pycache__/
-*.pyc
+.env.local
 node_modules/
 dist/
-ios/
-android/
 npm-debug.log*
+.DS_Store

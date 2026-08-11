@@ -1,4 +1,5 @@
-import { Button, Container, Eyebrow, Heading, Row, Stack, Text } from '../components/ui'
+import { APP_NAME, APP_TAGLINE } from '../config.js'
+import { Button, Container, Heading, Row, Stack, Text } from '../components/ui'
 import './Home.css'
 
 export default function Home() {
@@ -8,15 +9,13 @@ export default function Home() {
 
       <Container width="narrow" className="home__inner">
         <Stack gap="2xl" align="center">
-          <Eyebrow>Positive expected value</Eyebrow>
-
           <Stack gap="lg" align="center">
             <Heading level={1} size="5xl" className="home__wordmark">
-              EV&nbsp;Bet
+              {APP_NAME}
             </Heading>
 
             <Text size="xl" tone="muted" measure>
-              A calmer way to find an edge.
+              {APP_TAGLINE}
             </Text>
           </Stack>
 

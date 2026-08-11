@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="EV Bet">
-  <rect width="256" height="256" rx="52" fill="#0a0a0a"/>
-  <path d="M52 164L99 91l34 45 28-31 43 59" fill="none" stroke="#c8f135" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="99" cy="91" r="10" fill="#35f1a0"/>
-  <circle cx="133" cy="136" r="10" fill="#35f1a0"/>
-  <circle cx="161" cy="105" r="10" fill="#35f1a0"/>
-  <path d="M57 194h142" stroke="#f0f0f0" stroke-width="14" stroke-linecap="round"/>
-  <text x="128" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="#f0f0f0">EV</text>
-</svg>

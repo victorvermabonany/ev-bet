@@ -57,7 +57,7 @@ p {
   text-wrap: pretty;
 }
 
-/* Numbers line up in columns — this app is full of odds and percentages. */
+/* Tabular figures, so any column of numbers lines up. */
 [data-numeric],
 table {
   font-variant-numeric: tabular-nums;

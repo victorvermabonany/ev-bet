@@ -1,5 +1,5 @@
 /*
- * Design tokens — the single source of truth for the EV Bet visual system.
+ * Design tokens — the single source of truth for the visual system.
  *
  * Nothing in the app should hardcode a colour, radius, shadow or font.
  * Reach for a var(--...) from this file instead, so the whole product can be

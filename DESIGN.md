@@ -1,4 +1,4 @@
-# EV Bet — visual system
+# Visual system
 
 Calm and editorial. Cream paper, warm ink, terracotta accent, serif
 headlines with real room to breathe. It should feel like a well-designed
@@ -36,7 +36,7 @@ breakpoints. Display type is set at `--weight-regular`; Fraunces reads
 better light and large than bold and small.
 
 Numbers use tabular figures automatically via the `[data-numeric]`
-attribute — worth reaching for on any odds or percentage column.
+attribute — worth reaching for on any column of numbers.
 
 ## Colour
 

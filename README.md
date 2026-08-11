@@ -1,14 +1,14 @@
-# EV Bet — web
+# Ember
 
-React frontend for EV Bet, built with Vite. The existing Flask app
-(`../server.py`) is untouched; this is a separate project that can be
-developed and built independently.
+A React app built with Vite, on a warm editorial design system.
+
+`Ember` is a placeholder name — it lives in `src/config.js` alongside the
+tagline, so changing it there updates every screen that shows the wordmark.
 
 ```bash
-cd web
 npm install
 npm run dev      # http://localhost:5173
-npm run build    # production bundle → web/dist
+npm run build    # production bundle → dist/
 npm run preview  # serve the built bundle
 ```
 
@@ -30,6 +30,9 @@ src/components/ui/
   Layout.jsx      Container, Stack, Row, Section
   Typography.jsx  Heading, Text, Eyebrow
   index.js        barrel export
+
+src/pages/
+  Home.jsx        the homepage
 ```
 
 Build screens from these primitives rather than writing one-off CSS:
