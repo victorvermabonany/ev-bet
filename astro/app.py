@@ -32,9 +32,32 @@ CORS(app)
 CACHE_LIMIT = 256
 _chart_cache: OrderedDict[str, tuple] = OrderedDict()
 
-# PRD open question 3 (pricing). Kept as config so it can be changed without a
-# deploy, and so the paywall copy has a single source of truth.
-PRICE_LABEL = os.environ.get("ASTRO_PRICE_LABEL", "$5.99/mo")
+# Whop pricing. Plan IDs come from astro/scripts/setup_whop.sh; the labels live
+# here so the paywall copy has one source of truth and can change without a
+# deploy. If the plan IDs are unset the paywall still renders and falls back to
+# its demo unlock, so the app is never broken by missing commerce config.
+WHOP_PLANS = [
+    {
+        "key": "weekly",
+        "planId": os.environ.get("WHOP_WEEKLY_PLAN_ID", ""),
+        "name": "Weekly",
+        "price": os.environ.get("WHOP_WEEKLY_PRICE", "$7.99"),
+        "cadence": "per week",
+        "trialDays": int(os.environ.get("WHOP_TRIAL_DAYS", "3")),
+        "note": "Cancel anytime.",
+        "highlighted": True,
+    },
+    {
+        "key": "annual",
+        "planId": os.environ.get("WHOP_ANNUAL_PLAN_ID", ""),
+        "name": "Annual",
+        "price": os.environ.get("WHOP_ANNUAL_PRICE", "$89"),
+        "cadence": "per year",
+        "trialDays": 0,
+        "note": "Billed once a year.",
+        "highlighted": False,
+    },
+]
 
 
 class BadRequest(Exception):
@@ -141,9 +164,19 @@ def _parse_birth(payload: dict):
     return result
 
 
+def whop_config() -> dict:
+    return {
+        "productId": os.environ.get("WHOP_PRODUCT_ID", ""),
+        "plans": WHOP_PLANS,
+        # False until the plan IDs exist, which is what the front end keys off
+        # to decide between a real checkout and the demo unlock.
+        "configured": all(p["planId"] for p in WHOP_PLANS),
+    }
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", price_label=PRICE_LABEL)
+    return render_template("index.html")
 
 
 @app.route("/health")
@@ -153,6 +186,7 @@ def health():
         "aiConfigured": reading.api_configured(),
         "model": reading.MODEL,
         "voice": reading.VOICE,
+        "whopConfigured": whop_config()["configured"],
     })
 
 
@@ -213,8 +247,8 @@ def api_question():
 def api_config():
     return jsonify({
         "aiConfigured": reading.api_configured(),
-        "priceLabel": PRICE_LABEL,
         "voice": reading.VOICE,
+        "whop": whop_config(),
     })
 
 

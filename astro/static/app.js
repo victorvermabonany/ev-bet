@@ -17,6 +17,8 @@
     place: null,      // the picked place, incl. coordinates + timezone
     tier: "free",
     chart: null,
+    whop: null,     // pricing config from /api/config
+    plan: null,     // the currently selected plan
   };
 
   // ---------- place autocomplete ----------
@@ -216,6 +218,11 @@
 
     $("upsell-block").classList.toggle("hidden", readingData.tier === "paid");
     $("ask-block").classList.toggle("hidden", readingData.tier !== "paid");
+
+    if (readingData.tier !== "paid") {
+      renderLockedPreview();
+      renderPlans();
+    }
   }
 
   function renderCards(container, items, className) {
@@ -331,20 +338,116 @@
       `${chart.houseSystem} houses · Swiss Ephemeris`;
   }
 
-  // ---------- unlock ----------
+  // ---------- paywall ----------
+
+  /* Blurred skeletons stand in for the locked sections. They are generated
+     here rather than sent by the server, so none of the paid reading reaches
+     the browser before it is paid for. */
+  function renderLockedPreview() {
+    const host = $("locked-preview");
+    if (!host || host.childElementCount) return;
+    [["title", "mid", "short"], ["title", "mid", "mid", "short"], ["title", "short", "mid"]]
+      .forEach((lines) => {
+        const card = el("div", "skeleton-card");
+        lines.forEach((kind) => card.appendChild(el("div", `skeleton-line ${kind}`)));
+        host.appendChild(card);
+      });
+  }
+
+  function renderPlans() {
+    const host = $("plans");
+    if (!host || host.childElementCount) return;
+    const plans = (state.whop && state.whop.plans) || [];
+
+    plans.forEach((plan) => {
+      const card = el("button", "plan");
+      card.type = "button";
+      card.setAttribute("aria-pressed", String(Boolean(plan.highlighted)));
+      if (plan.highlighted && plan.trialDays) {
+        card.appendChild(el("span", "plan-badge", `${plan.trialDays} days free`));
+      }
+      card.appendChild(el("span", "plan-name", plan.name));
+      card.appendChild(el("span", "plan-price", plan.price));
+      card.appendChild(el("span", "plan-cadence", plan.cadence));
+      card.appendChild(el("span", "plan-note", plan.note));
+      card.addEventListener("click", () => selectPlan(plan.key));
+      host.appendChild(card);
+      if (plan.highlighted) state.plan = plan;
+    });
+
+    if (!state.plan && plans.length) state.plan = plans[0];
+    syncPaywallCopy();
+  }
+
+  function selectPlan(key) {
+    const plans = (state.whop && state.whop.plans) || [];
+    state.plan = plans.find((p) => p.key === key) || state.plan;
+    [...$("plans").children].forEach((card, index) =>
+      card.setAttribute("aria-pressed", String(plans[index] && plans[index].key === key))
+    );
+    syncPaywallCopy();
+  }
+
+  function syncPaywallCopy() {
+    const plan = state.plan;
+    if (!plan) return;
+    $("unlock").textContent = plan.trialDays ? "Start free trial" : `Get ${plan.name.toLowerCase()}`;
+    $("paywall-note").textContent = plan.trialDays
+      ? `${plan.trialDays} days free, then ${plan.price} ${plan.cadence}.`
+      : `${plan.price} ${plan.cadence}.`;
+  }
+
+  /* Opening the Whop overlay: append an element carrying the plan id and the
+     overlay attribute. The loader installs a MutationObserver, so an element
+     added now is picked up and mounted without re-running the script. */
+  function openWhopCheckout(planId) {
+    document.querySelectorAll("[data-whop-checkout-plan-id]").forEach((n) => n.remove());
+    const mount = document.createElement("div");
+    mount.setAttribute("data-whop-checkout-plan-id", planId);
+    mount.setAttribute("data-whop-checkout-overlay", "true");
+    mount.setAttribute("data-whop-checkout-theme", "light");
+    document.body.appendChild(mount);
+    return mount;
+  }
+
+  async function applyPaidReading() {
+    const reading = await postJSON("/api/reading", { ...state.birth, tier: "paid" });
+    state.tier = "paid";
+    renderResults(state.chart, reading);
+    $("ask-block").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // Whop reports checkout outcomes by posting a message to the host page.
+  window.addEventListener("message", async (event) => {
+    if (!/whop\.com$/.test(new URL(event.origin).hostname)) return;
+    const type = event.data && (event.data.event || event.data.type);
+    if (type !== "complete" && type !== "success") return;
+    try {
+      await applyPaidReading();
+    } catch (error) {
+      alert(`Payment went through, but loading the reading failed: ${error.message}`);
+    }
+  });
 
   $("unlock").addEventListener("click", async () => {
     const button = $("unlock");
+    const planId = state.plan && state.plan.planId;
+
+    // Real checkout when the plans exist; otherwise the demo unlock, so the app
+    // is still explorable before anyone has run the Whop setup script.
+    if (state.whop && state.whop.configured && planId && window.wco) {
+      openWhopCheckout(planId);
+      return;
+    }
+
+    const original = button.textContent;
     button.disabled = true;
     button.textContent = "Unlocking…";
     try {
-      const reading = await postJSON("/api/reading", { ...state.birth, tier: "paid" });
-      state.tier = "paid";
-      renderResults(state.chart, reading);
-      $("ask-block").scrollIntoView({ behavior: "smooth", block: "center" });
+      await applyPaidReading();
     } catch (error) {
       button.disabled = false;
-      button.textContent = "Unlock the full reading";
+      button.textContent = original;
       alert(error.message);
     }
   });
@@ -582,6 +685,7 @@
   fetch("/api/config")
     .then((response) => response.json())
     .then((config) => {
+      state.whop = config.whop || null;
       if (!config.aiConfigured) {
         $("engine-note").textContent =
           "Swiss Ephemeris · calculated locally · template reader";

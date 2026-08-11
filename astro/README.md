@@ -273,6 +273,62 @@ webfont that silently falls back would undo half the identity.
 | `POST /api/question` | Streaming answer to one career question (SSE) |
 | `GET /health`, `/api/config` | Status |
 
+## Pricing and checkout (Whop)
+
+Two plans, created with the Whop CLI by `scripts/setup_whop.sh`:
+
+| | Plan | Price | Trial | Treatment |
+|---|---|---|---|---|
+| Default | Weekly | **$7.99** / week | **3 days free** | Highlighted — terracotta border, gold "3 days free" badge, pre-selected, and the CTA reads "Start free trial" |
+| Secondary | Annual | $89 / year | — | Present and legible, but no accent, no badge, no border weight |
+
+```bash
+curl -fsSL https://whop.com/install.sh | sh   # if you don't have the CLI
+whop login                                    # or: export WHOP_API_KEY=whop_xxx
+sh astro/scripts/setup_whop.sh                # prints the plan IDs
+```
+
+Then set what it prints (`WHOP_PRODUCT_ID`, `WHOP_WEEKLY_PLAN_ID`,
+`WHOP_ANNUAL_PLAN_ID`) and restart. The app reads them from `/api/config`.
+
+**Where the paywall sits.** Exactly at the transition the free reading stops
+at. The locked sections continue behind a blur that fades into the page ground,
+with the pricing card sitting over that boundary — so you can see there is more
+rather than hitting a wall.
+
+The blurred shapes are **skeletons generated in the browser**. No paid content
+is sent to the client and then hidden with CSS; the tier split stays enforced
+server-side in `build_facts()`, which is the only place it can't be undone with
+devtools.
+
+**The checkout modal** is Whop's embedded overlay
+(`js.whop.com/static/checkout/loader.js`). Clicking the CTA appends an element
+carrying `data-whop-checkout-plan-id` and `data-whop-checkout-overlay`; the
+loader runs a MutationObserver, so an element added at click time mounts and
+opens. Completion arrives as a `postMessage`, and the handler **checks the
+event origin is a whop.com host** before unlocking — a page-local message with
+the same shape is ignored.
+
+If the plan IDs are unset, or the loader is blocked, the CTA falls back to the
+demo unlock so the app is still explorable.
+
+### Not done yet: server-side entitlement
+
+The checkout is wired, but **the paywall is not yet enforced against a real
+purchase**. `POST /api/reading` with `tier: "paid"` is unauthenticated — the
+unlock is currently driven by a client-side event, so anyone who can craft a
+request can get the paid reading. Making this real needs, roughly:
+
+1. A Whop webhook endpoint receiving `membership.went_valid` / payment events.
+2. A session or token identifying the buyer, since the app deliberately stores
+   nothing and has no accounts today.
+3. `/api/reading` verifying an active membership (`whop memberships list`)
+   before honouring `tier: "paid"`.
+
+Step 2 is the real design decision, because it is the first thing that would
+give this app persistent user state. Worth deciding deliberately rather than
+by accident.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -280,7 +336,11 @@ webfont that silently falls back would undo half the identity.
 | `ANTHROPIC_API_KEY` | — | Enables the AI reading layer |
 | `ASTRO_MODEL` | `claude-opus-5` | Model |
 | `ASTRO_VOICE` | `grounded` | Brand voice — `grounded` or `playful` |
-| `ASTRO_PRICE_LABEL` | `$5.99/mo` | Paywall copy |
+| `WHOP_WEEKLY_PLAN_ID` | — | Weekly plan (`plan_…`) from the setup script |
+| `WHOP_ANNUAL_PLAN_ID` | — | Annual plan (`plan_…`) |
+| `WHOP_PRODUCT_ID` | — | Product the plans hang off |
+| `WHOP_WEEKLY_PRICE` / `WHOP_ANNUAL_PRICE` | `$7.99` / `$89` | Display copy only |
+| `WHOP_TRIAL_DAYS` | `3` | Trial length shown on the badge |
 | `PORT` | `5001` | Server port |
 
 ## Where the PRD's open questions landed

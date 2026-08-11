@@ -879,7 +879,153 @@ section.block { margin-bottom: 56px; }
 
 .next-step p { color: #6f4530; font-size: 16.5px; }
 
-/* paywall — the night-sky surface */
+/* ---------- paywall ----------
+   The free reading ends and the locked sections continue behind a blur, so the
+   boundary is visible rather than abrupt. The blurred shapes are skeletons
+   generated in the browser — no paid content is sent to the client, which keeps
+   the tier split enforced on the server where it belongs. */
+
+.locked {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.locked-preview {
+  padding: 4px 0 220px;
+  filter: blur(7px);
+  opacity: 0.5;
+  user-select: none;
+  pointer-events: none;
+}
+
+.skeleton-card {
+  background: var(--card);
+  border: 1px solid var(--sand);
+  border-radius: var(--radius);
+  padding: 24px 26px;
+  margin-bottom: 16px;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--cream-deep), var(--sand), var(--cream-deep));
+  margin-bottom: 11px;
+}
+
+.skeleton-line.title { height: 17px; width: 42%; background: var(--sand-deep); margin-bottom: 16px; }
+.skeleton-line.short { width: 62%; }
+.skeleton-line.mid { width: 84%; }
+
+.locked-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+              rgba(247, 241, 232, 0) 0%,
+              rgba(247, 241, 232, 0.72) 26%,
+              var(--cream) 52%);
+  pointer-events: none;
+}
+
+.paywall {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 620px;
+  text-align: center;
+  padding: 0 8px 4px;
+}
+
+.paywall h3 { font-size: clamp(25px, 3.4vw, 33px); letter-spacing: -0.022em; margin-bottom: 12px; }
+
+.paywall-sub {
+  color: var(--ink-soft);
+  font-size: 16px;
+  max-width: 52ch;
+  margin: 0 auto 26px;
+}
+
+/* Two options, one obviously the default. The annual card is present and
+   legible but carries no accent, no border weight and no badge. */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.plan {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--sand-deep);
+  border-radius: var(--radius-sm);
+  padding: 18px 18px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--sans);
+  color: var(--ink);
+  /* Explicit rather than inherited: a <button> centres its own text by UA
+     default, and relying on that quietly is how these drift apart later. */
+  text-align: center;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.plan:hover { border-color: var(--terracotta); }
+
+.plan[aria-pressed="true"] {
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 2px rgba(193, 89, 43, 0.18);
+  background: var(--terracotta-wash);
+}
+
+.plan-name {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.plan-price {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 25px;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.plan-cadence { font-size: 13.5px; color: var(--ink-faint); }
+.plan-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 4px; }
+
+.plan-badge {
+  position: absolute;
+  top: -9px;
+  right: 14px;
+  background: var(--gold);
+  color: #40320f;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+}
+
+.paywall-note {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin-top: 13px;
+}
+
+.paywall-trust { font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; }
+
+/* legacy night-sky panel, kept for the upsell surface elsewhere */
 
 .upsell {
   background: var(--navy);

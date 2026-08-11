@@ -255,16 +255,33 @@
       </div>
     </section>
 
+    <!-- The paywall sits exactly where the free reading stops. Above it, the
+         deeper sections are rendered as locked shapes that fade under a blur,
+         so you can see there is more without any of it being sent to the
+         browser — the tier split stays enforced server-side. -->
     <section class="block" id="upsell-block">
-      <div class="upsell">
-        <h3>Go deeper</h3>
-        <p>
-          The full reading adds your complete transit calendar for the next 18 months,
-          your Saturn return window, more of what's working against you, and lets you
-          ask about a specific decision.
-        </p>
-        <button class="btn-primary" id="unlock">Unlock the full reading</button>
-        <div class="upsell-price">{{ price_label }} · cancel anytime · this demo unlocks instantly</div>
+      <div class="block-label">The rest of your reading</div>
+
+      <div class="locked">
+        <div class="locked-preview" id="locked-preview" aria-hidden="true"></div>
+        <div class="locked-fade" aria-hidden="true"></div>
+
+        <div class="paywall">
+          <h3>Your timing doesn't stop here.</h3>
+          <p class="paywall-sub">
+            You've seen one window. Your chart has more — the full transit
+            calendar for the next 18 months, your Saturn return, the rest of the
+            friction, and the ability to ask about a decision you're weighing now.
+          </p>
+
+          <div class="plans" id="plans" role="group" aria-label="Choose a plan"></div>
+
+          <button class="btn-primary btn-lg" id="unlock">Start free trial</button>
+          <div class="paywall-note" id="paywall-note"></div>
+          <div class="paywall-trust">
+            Secure checkout by Whop · cancel anytime · nothing stored by us
+          </div>
+        </div>
       </div>
     </section>
 
@@ -311,6 +328,7 @@
   </footer>
 </div>
 
+<script async defer src="https://js.whop.com/static/checkout/loader.js"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
