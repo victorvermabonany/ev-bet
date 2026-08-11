@@ -71,10 +71,39 @@ CREATE INDEX IF NOT EXISTS grants_by_user ON grants (whop_user_id);
 """
 
 
+def _resolve_db_path() -> str:
+    """Where the grants file can actually be written.
+
+    ASTRO_DB_PATH normally points at a mounted disk. If that directory does not
+    exist or is not writable -- the common case being a Render blueprint whose
+    disk is commented out on the free plan -- fall back to a path beside the app
+    rather than refusing to boot. Losing persistence degrades the service;
+    failing to start takes it down entirely, and the fallback is no less durable
+    than the ephemeral filesystem the mount point would have been.
+    """
+    directory = os.path.dirname(os.path.abspath(DB_PATH))
+    try:
+        os.makedirs(directory, exist_ok=True)
+        if os.access(directory, os.W_OK):
+            return DB_PATH
+        raise OSError(f"{directory} is not writable")
+    except OSError as exc:
+        fallback = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "transit.db"
+        )
+        log.warning(
+            "ASTRO_DB_PATH=%s unusable (%s); falling back to %s. Entitlements "
+            "will not survive a restart -- mount a persistent disk before "
+            "taking real payments.",
+            DB_PATH, exc, fallback,
+        )
+        return fallback
+
+
 def _connect() -> sqlite3.Connection:
     global _connection
     if _connection is None:
-        _connection = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _connection = sqlite3.connect(_resolve_db_path(), check_same_thread=False)
         _connection.row_factory = sqlite3.Row
         _connection.executescript(SCHEMA)
         _connection.commit()

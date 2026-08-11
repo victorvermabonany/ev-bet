@@ -28,6 +28,42 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
-      # Set this in the dashboard, not here — never commit a key.
+      # All of these are set in the dashboard, not here — never commit a key.
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Required before the webhook will grant anyone access. With this unset
+      # the endpoint fails closed and rejects every event, which is the safe
+      # default but means nobody can ever unlock.
+      - key: WHOP_WEBHOOK_SECRET
+        sync: false
+      # Only needed for real checkout: the server creates the checkout
+      # configuration that carries the session token into the purchase.
+      - key: WHOP_API_KEY
+        sync: false
+      - key: WHOP_WEEKLY_PLAN_ID
+        sync: false
+      - key: WHOP_ANNUAL_PLAN_ID
+        sync: false
+      - key: WHOP_PRODUCT_ID
+        sync: false
+      # Where the entitlement grants live. On the free plan this is ephemeral
+      # (see the disk note below) — it resets whenever the service restarts.
+      - key: ASTRO_DB_PATH
+        value: /var/data/entitlements.db
+
+    # Persistent storage for the grants table.
+    #
+    # COMMENTED OUT because Render disks require a Starter instance ($7/mo) —
+    # a free service cannot mount one, and Apply will fail with this enabled.
+    #
+    # On the free plan the service also spins down after ~15 minutes idle, so
+    # ASTRO_DB_PATH above is wiped on every restart and redeploy. That is fine
+    # for demoing the paywall (re-send the webhook and you are paid again) and
+    # NOT fine for real customers, who would silently lose access. Before
+    # taking money: upgrade the plan and uncomment this, or move the grants to
+    # managed Postgres.
+    #
+    # disk:
+    #   name: transit-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
