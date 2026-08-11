@@ -145,14 +145,15 @@
 <!-- ---------- intake ---------- -->
 <main id="view-intake" class="hidden">
   <div class="wrap">
-    <section class="hero">
-      <div class="eyebrow">Career astrology</div>
-      <h1>Your birth <em>moment</em>.</h1>
-      <p class="hero-sub">
-        The more exact this is, the more we can calculate. Birth time is what
-        unlocks your 10th house — the career point the whole reading turns on.
+    <header class="screen-head">
+      <div class="eyebrow">Step one</div>
+      <h1>Four fields, one real chart.<br><em>Calculated, not guessed.</em></h1>
+      <p class="screen-sub">
+        Birth time is what unlocks your 10th house — the career point the whole
+        reading turns on. If you don't know it, say so and we'll work without it
+        rather than guess.
       </p>
-    </section>
+    </header>
 
     <section class="panel">
       <div class="field-grid">
@@ -199,8 +200,8 @@
 <div id="view-loading" class="hidden">
   <div class="wrap loading">
     <div class="orbit"></div>
-    <h2 id="loading-title">Calculating your chart…</h2>
-    <p id="loading-sub">Finding planetary positions for your exact birth moment.</p>
+    <h2 id="loading-title">Calculating your chart.</h2>
+    <p id="loading-sub">Real planetary positions for your exact birth moment.</p>
   </div>
 </div>
 
@@ -208,11 +209,11 @@
 <main id="view-results" class="hidden">
   <div class="wrap results">
 
-    <div class="result-head">
+    <header class="screen-head result-head">
       <div class="eyebrow" id="tier-label">Your career reading</div>
-      <h1 id="headline"></h1>
+      <h1>Your chart, decoded.<br><em id="headline"></em></h1>
       <div class="birth-line" id="birth-line"></div>
-    </div>
+    </header>
 
     <div class="notice hidden" id="no-time-notice">
       No birth time given, so houses, your Midheaven and your Ascendant can't be
@@ -296,8 +297,8 @@
       </div>
     </section>
 
-    <div class="form-actions">
-      <button class="btn-secondary" id="restart">Start over</button>
+    <div class="restart-row">
+      <button class="text-link" id="restart">Start over with a different birth date</button>
     </div>
   </div>
 </main>

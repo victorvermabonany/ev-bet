@@ -136,6 +136,48 @@ reached only by the CTA.
 - **No urgency tactics** — no countdowns, no scarcity. They'd contradict the
   calm, credible register the rest of the product works in.
 
+## Consistency rules across screens
+
+The landing page's principles are applied to every screen, not just the
+marketing page. There are four, and they are enforced by an in-browser audit
+rather than by eye.
+
+**One heading system.** Every screen leads with an eyebrow and a two-clause
+serif headline: benefit first, the specific/capability clause second and in the
+accent.
+
+| Screen | Benefit clause | Specific clause |
+|---|---|---|
+| Landing | Know when to move. | Real data, not vibes. |
+| Intake | Four fields, one real chart. | Calculated, not guessed. |
+| Loading | Calculating your chart. | — |
+| Results | Your chart, decoded. | *the generated signature* |
+
+On the results screen the generated headline becomes the second clause, so the
+personal payoff keeps the accent treatment the landing gives its capability
+line.
+
+**One primary CTA per screen.** The audit found three violations and all three
+are fixed: the nav CTA used to render on every screen (competing with
+"Calculate my chart" on the intake and "Unlock" on the results), so it is now
+gated to the marketing page; "Start over" was a second button and is now a
+quiet text link. Chips in the ask box are input affordances, not calls to
+action, and stay.
+
+**One typography system.** Serif headings, sans body, mono for anything
+calculated — everywhere, not just the landing. Two things changed to hold the
+line: dates inside status tags now take the mono face while the status word
+stays sans, and the reading's opening paragraph moved from serif to sans. It is
+generated prose rather than a heading, and the landing page has no serif body
+text either, so it was the one place the app disagreed with itself.
+
+**Imagery stays on the marketing page.** The full-bleed night sky, the
+starfield and the trust badge exist only on the landing view — dense imagery
+behind a form or a dense results table would cost readability for nothing. App
+screens use the cream/terracotta palette throughout. The nav follows the same
+rule: inverted while it is genuinely over the dark hero, cream everywhere else,
+including once you scroll past the sky on the landing page itself.
+
 ## The mark
 
 A chart wheel, its horizon (the Ascendant–Descendant axis), and a body crossing

@@ -190,6 +190,8 @@ a { color: var(--terracotta-deep); }
 
 .nav.scrolled { border-bottom-color: var(--sand); }
 
+.nav:not(.marketing) .nav-cta { display: none; }
+
 .nav-inner {
   display: flex;
   align-items: center;
@@ -392,9 +394,11 @@ a { color: var(--terracotta-deep); }
 .limits p { color: var(--ink-soft); font-size: 17px; margin-bottom: 16px; }
 .limits .btn-primary { margin-top: 22px; }
 
-/* ---------- hero ---------- */
-
-.hero { padding: 52px 0 44px; }
+/* ---------- screen headings ----------
+   Every screen leads the same way the landing page does: an eyebrow, then a
+   two-clause serif headline — benefit first, the specific/capability clause
+   second and in the accent. Only the ground changes (night sky on the
+   marketing page, cream everywhere in the app). */
 
 .eyebrow {
   font-size: 11.5px;
@@ -405,26 +409,28 @@ a { color: var(--terracotta-deep); }
   font-weight: 600;
 }
 
-.hero h1 {
-  font-size: clamp(46px, 8vw, 86px);
-  line-height: 1.02;
-  letter-spacing: -0.03em;
+.screen-head { padding: 52px 0 44px; }
+
+.screen-head h1 {
+  font-size: clamp(36px, 5.6vw, 58px);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
   margin-bottom: 24px;
-  max-width: 14ch;
+  max-width: 20ch;
 }
 
-.hero h1 em {
+.screen-head h1 em {
   font-style: italic;
   color: var(--terracotta);
 }
 
-.hero-sub {
-  font-size: 19px;
+.screen-sub {
+  font-size: 18px;
   color: var(--ink-soft);
   max-width: 56ch;
 }
 
-.hero-sub strong { color: var(--ink); font-weight: 600; }
+.screen-sub strong { color: var(--ink); font-weight: 600; }
 
 /* ---------- panels & form ---------- */
 
@@ -565,17 +571,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary:hover:not(:disabled) { background: var(--terracotta-deep); }
 
-.btn-secondary {
-  background: transparent;
-  color: var(--ink-soft);
-  padding: 12px 24px;
-  border: 1px solid var(--sand-deep);
+/* One primary CTA per screen is the rule, so a genuinely secondary action is
+   demoted to a text link rather than given a button that competes for the eye. */
+.text-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink-faint);
+  font-size: 14.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--sand-deep);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  border-color: var(--navy);
-  color: var(--navy);
-}
+.text-link:hover { color: var(--terracotta-deep); text-decoration-color: currentColor; }
+
+.restart-row { margin-top: 34px; }
 
 .form-actions {
   margin-top: 28px;
@@ -646,19 +657,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .results { padding-bottom: 96px; }
 
 .result-head {
-  padding: 26px 0 40px;
+  padding: 34px 0 40px;
   border-bottom: 1px solid var(--sand);
   margin-bottom: 44px;
 }
 
 .result-head .eyebrow { margin-bottom: 16px; }
 
-.result-head h1 {
-  font-size: clamp(32px, 5vw, 48px);
-  letter-spacing: -0.022em;
-  max-width: 19ch;
-  margin-bottom: 22px;
-}
+/* The generated signature is the specific clause, so it inherits the accent
+   treatment the landing page gives its capability line. */
+.result-head h1 { margin-bottom: 22px; }
 
 .birth-line {
   font-size: 13px;
@@ -687,11 +695,15 @@ section.block { margin-bottom: 56px; }
   background: var(--sand);
 }
 
+/* The opening paragraph of a reading is generated prose, not a heading, so it
+   takes the body face like every other paragraph in the product. Hierarchy
+   comes from size and colour instead — the landing page has no serif body text
+   either, and this is the one place the app used to disagree with it. */
 .lede {
-  font-family: var(--serif);
-  font-size: 23px;
-  line-height: 1.5;
-  letter-spacing: -0.012em;
+  font-family: var(--sans);
+  font-size: 20px;
+  line-height: 1.6;
+  letter-spacing: -0.004em;
   color: var(--ink);
   max-width: var(--measure);
 }
@@ -777,6 +789,13 @@ section.block { margin-bottom: 56px; }
 
 /* Terracotta = happening now. Gold = a confirmed exact hit. Muted = in orb
    but never perfects. The colour encodes how actionable the window is. */
+.tag-date {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
 .tag.active { background: var(--terracotta-wash); color: var(--terracotta-deep); }
 .tag.exact { background: var(--gold-wash); color: var(--gold-deep); }
 .tag.soft { background: var(--cream-deep); color: var(--ink-faint); }
@@ -1016,8 +1035,8 @@ section.block { margin-bottom: 56px; }
   body { font-size: 16px; }
   .wrap { padding: 0 18px; }
   .panel { padding: 24px; }
-  .hero { padding: 34px 0 32px; }
-  .hero h1 { max-width: 100%; }
+  .screen-head { padding: 34px 0 32px; }
+  .screen-head h1 { max-width: 100%; }
 
   .sky { padding: 204px 0 96px; }
   .sky-headline { max-width: 100%; }

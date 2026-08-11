@@ -118,10 +118,11 @@
     ["landing", "intake", "loading", "results"].forEach((name) =>
       $(`view-${name}`).classList.toggle("hidden", name !== view)
     );
-    // The nav only sits over the night sky on the landing view; everywhere else
-    // it resolves to the cream bar.
+    // `marketing` gates the nav CTA to the landing page, so app screens keep a
+    // single primary action of their own.
+    $("nav").classList.toggle("marketing", view === "landing");
     $("nav").classList.toggle("on-sky", view === "landing");
-    syncNav();
+    requestAnimationFrame(syncNav);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -162,8 +163,8 @@
       const chartResponse = await postJSON("/api/chart", state.birth);
       state.chart = chartResponse;
 
-      $("loading-title").textContent = "Reading your chart…";
-      $("loading-sub").textContent = "Interpreting the career placements and current transits.";
+      $("loading-title").textContent = "Reading your tenth house.";
+      $("loading-sub").textContent = "Finding the career placements and the transits crossing them.";
 
       const reading = await postJSON("/api/reading", { ...state.birth, tier: "free" });
       renderResults(chartResponse, reading);
@@ -250,7 +251,7 @@
       if (match) {
         if (match.activeNow) when.appendChild(makeTag("Active now", "active"));
         if (match.perfects) {
-          when.appendChild(makeTag(`Exact ${match.exact_dates.join(", ")}`, "exact"));
+          when.appendChild(makeTag("Exact", "exact", match.exact_dates.join(", ")));
         } else {
           when.appendChild(makeTag("Never exact", "soft"));
         }
@@ -289,8 +290,12 @@
     }
   }
 
-  function makeTag(text, kind) {
+  function makeTag(text, kind, data) {
     const tag = el("span", `tag ${kind}`, text);
+    if (data) {
+      tag.appendChild(document.createTextNode(" "));
+      tag.appendChild(el("span", "tag-date", data));
+    }
     tag.style.display = "block";
     return tag;
   }
@@ -477,8 +482,17 @@
   );
 
   function syncNav() {
-    const scrolled = window.scrollY > 8;
-    $("nav").classList.toggle("scrolled", scrolled && !$("nav").classList.contains("on-sky"));
+    const nav = $("nav");
+    const sky = document.querySelector(".sky");
+    // The inverted treatment only holds while the nav is actually over the dark
+    // hero; scrolling past it on the landing page hands the nav back to cream,
+    // otherwise it would be light text on a light ground.
+    const overSky =
+      nav.classList.contains("marketing") &&
+      sky &&
+      window.scrollY < sky.offsetHeight - nav.offsetHeight - 12;
+    nav.classList.toggle("on-sky", Boolean(overSky));
+    nav.classList.toggle("scrolled", window.scrollY > 8 && !overSky);
   }
 
   window.addEventListener("scroll", syncNav, { passive: true });
@@ -561,7 +575,7 @@
   }
 
   startStarfield();
-  $("nav").classList.add("on-sky");
+  $("nav").classList.add("marketing", "on-sky");
 
   // ---------- boot ----------
 
