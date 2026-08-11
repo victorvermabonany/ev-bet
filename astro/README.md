@@ -1,4 +1,6 @@
-# Tenth House — career astrology, calculated
+# Transit — know when to move
+
+**Your chart. Your timing. Real data, not vibes.**
 
 A career-focused astrology app. It computes a real birth chart from the Swiss
 Ephemeris, extracts the placements that traditionally speak to work, finds the
@@ -107,6 +109,45 @@ gunicorn --chdir astro app:app --timeout 120 --workers 2
 
 `--timeout 120` matters: the question endpoint streams, and the transit scan
 takes about half a second of CPU on a cold chart.
+
+## Design system
+
+Built to the brand kit. The five palette values are exact; everything else is
+derived from them.
+
+| Role | Token | Hex |
+|---|---|---|
+| Background | `--cream` | `#F7F1E8` |
+| Primary text | `--ink` | `#2B2620` |
+| Accent, primary | `--terracotta` | `#C1592B` |
+| Accent, secondary | `--navy` | `#1F2A44` |
+| Highlight / success | `--gold` | `#C9A24B` |
+
+Neutrals (`--ink-soft`, `--sand`, `--card`…) are warm-biased toward the cream
+rather than flat greys, so they read as chosen rather than inherited.
+
+**Three typefaces, one job each** — and the split is the brand argument:
+
+| Face | Token | Used for |
+|---|---|---|
+| Fraunces | `--serif` | Headlines and the lede |
+| Inter | `--sans` | Body copy, labels, UI |
+| Space Mono | `--mono` | Every calculated value |
+
+Anything the ephemeris produced — degrees, dates, coordinates, Julian day — is
+set in Space Mono with tabular figures. Anything written is set in Inter. You
+can tell computed data from interpretation at a glance, which is the product's
+whole positioning rendered as typography.
+
+**Colour encodes meaning, it isn't decoration.** In the timing section,
+terracotta means the window is live now, gold means the aspect goes exact on a
+real date, and muted sand means it enters orb but never perfects. Navy carries
+the night-sky surfaces: the paywall panel, the Midheaven/Ascendant readouts,
+and the friction rail.
+
+Fonts are self-hosted in `static/fonts/` (~330 KB, latin + latin-ext subsets)
+rather than loaded from a CDN. The chart engine already runs offline, and a
+webfont that silently falls back would undo half the identity.
 
 ## API
 

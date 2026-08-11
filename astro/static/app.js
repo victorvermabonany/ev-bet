@@ -1,4 +1,4 @@
-/* Tenth House — front end.
+/* Transit — front end.
    Stateless: the browser holds the birth data and posts it with each request. */
 
 (() => {

@@ -374,7 +374,7 @@ PAYLOAD = {
 def test_index_renders(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert b"Tenth" in response.data
+    assert b"transit" in response.data.lower()
 
 
 def test_health_and_config(client):

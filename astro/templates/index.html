@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tenth House — career astrology, calculated</title>
-<meta name="description" content="A real birth chart, read for one thing: your career and when to move.">
+<title>Transit — know when to move</title>
+<meta name="description" content="Career astrology built on real calculated chart data. Your chart, your timing, and the windows worth acting on.">
+<meta name="theme-color" content="#f7f1e8">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
@@ -12,8 +13,17 @@
 
 <div class="wrap">
   <header class="masthead">
-    <div class="wordmark">Tenth<span>·</span>House</div>
-    <div class="masthead-note" id="engine-note">Swiss Ephemeris · positions calculated locally</div>
+    <div class="wordmark">
+      <!-- A body crossing its orbit: the mark is literally a transit. -->
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+        <ellipse cx="16" cy="16" rx="13.5" ry="8"
+                 transform="rotate(-22 16 16)"
+                 fill="none" stroke="#1f2a44" stroke-width="1.4"/>
+        <circle cx="25" cy="10" r="3.6" fill="#c1592b"/>
+      </svg>
+      <span>transit</span>
+    </div>
+    <div class="masthead-note" id="engine-note">Swiss Ephemeris · calculated locally</div>
   </header>
 </div>
 
@@ -22,11 +32,12 @@
   <div class="wrap">
     <section class="hero">
       <div class="eyebrow">Career astrology</div>
-      <h1>Your chart has a <em>tenth house</em>. Most apps never mention it.</h1>
+      <h1>Know when to <em>move</em>.</h1>
       <p class="hero-sub">
-        We calculate your real birth chart from astronomical data, then read the parts
-        that actually speak to work — the 10th house, Saturn, and the transits moving
-        across them right now. Built for one question: what to do about your career, and when.
+        Transit calculates your real birth chart, then reads the placements that
+        actually govern work — your 10th house, Saturn, and the transits crossing
+        them right now. You get dated windows, not daily affirmations.
+        <strong>Real data, not vibes.</strong>
       </p>
     </section>
 
@@ -70,19 +81,20 @@
 
     <section class="credibility">
       <div class="cred">
-        <h4>Real positions, not vibes</h4>
-        <p>Every degree comes from the Swiss Ephemeris — the same calculation engine
-           professional astrologers use. We show you the raw numbers underneath every claim.</p>
+        <h4>Calculated, not generated</h4>
+        <p>Every degree comes from the Swiss Ephemeris — the same engine
+           professional astrologers use. We show you the raw numbers underneath
+           every claim we make.</p>
       </div>
       <div class="cred">
         <h4>Career, not horoscopes</h4>
-        <p>No daily affirmations, no compatibility quiz. The 10th house, Saturn,
-           the 2nd and 6th, and the transits currently hitting them.</p>
+        <p>No daily affirmations, no compatibility quiz. Your 10th house, Saturn,
+           the 2nd and 6th, and the transits currently crossing them.</p>
       </div>
       <div class="cred">
         <h4>Dates you can act on</h4>
-        <p>Transit windows with real start, exact, and end dates — so timing a
-           negotiation or a resignation stops being a guess.</p>
+        <p>Windows with real start, exact, and end dates — so timing a negotiation
+           or a resignation stops being a guess.</p>
       </div>
     </section>
   </div>
@@ -197,7 +209,7 @@
 
 <div class="wrap">
   <footer class="footer">
-    <span>Tenth House — career astrology, calculated.</span>
+    <span>Transit — your chart, your timing, real data.</span>
     <span>For reflection, not prediction. Career decisions are yours.</span>
   </footer>
 </div>
