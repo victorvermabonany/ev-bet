@@ -51,15 +51,39 @@ Positions come from the Moshier analytical ephemeris, which is bundled with
 `pyswisseph` and needs no data files. Accuracy is well under an arcminute for
 any modern birth date — far finer than astrology's own conventional orbs.
 
-## Running it
+## Running it locally
+
+From the repository root, on the `claude/career-astrology-app-sgt5t7` branch:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r astro/requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...     # optional; see below
-python astro/app.py                     # http://localhost:5001
+python astro/app.py
 ```
 
-Tests (no network or API key required):
+Open **http://localhost:5001** and enter any birth date you like. Charts are
+calculated live by the Swiss Ephemeris — there is nothing precomputed in the
+running app.
+
+Optional, for the AI-written reading:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # before python astro/app.py
+```
+
+Verified from an empty virtualenv against this exact `requirements.txt`, so
+nothing is missing. Notes:
+
+- **Python 3.10+.** Built and tested on 3.11.
+- **First request takes ~3s.** The city index and timezone dataset warm on
+  first use; every chart after that is ~0.5s.
+- **Port** is 5001 by default; `PORT=8080 python astro/app.py` to change it.
+- Anything that isn't a real city gets a "pick one from the list" error — the
+  place field needs a selection from the dropdown so it has coordinates and a
+  timezone.
+
+Tests (no network or API key needed):
 
 ```bash
 python -m pytest astro/tests -v
@@ -98,17 +122,31 @@ decisive moment. The UI tags these "never exact" instead of implying a hit.
 data and posts it per request. Charts are cached in memory for the process
 lifetime only.
 
-## Deploying
+## Deploying to Render
 
-The repository root's `Procfile` belongs to the EV-betting app and is left
-alone. To deploy this app instead, point the service at `astro/` and run:
+`render.yaml` at the repository root defines this app as its own service. It
+does **not** touch the existing ev-bet service — that one was created manually
+in the dashboard and keeps using the root `Procfile`. A blueprint only affects
+services you explicitly create from it, so the two run side by side off the
+same repo.
 
-```
-gunicorn --chdir astro app:app --timeout 120 --workers 2
-```
+Dashboard → **New** → **Blueprint** → pick this repo and the
+`claude/career-astrology-app-sgt5t7` branch → **Apply**. Then set
+`ANTHROPIC_API_KEY` on the service if you want the AI reading; without it every
+chart is still calculated and the built-in template reader writes the prose.
 
-`--timeout 120` matters: the question endpoint streams, and the transit scan
-takes about half a second of CPU on a cold chart.
+Two settings in there are deliberate and worth keeping:
+
+- **One worker, four threads.** The process sits at ~180 MB resident once the
+  city index and timezone dataset are warm. Two workers would be ~360 MB and
+  risk the OOM killer on the 512 MB free plan. Threads give concurrency
+  instead; a chart is ~0.5s of CPU and the ephemeris calls serialise behind a
+  lock anyway.
+- **`--timeout 120`.** The question endpoint streams, and a cold chart request
+  does real work.
+
+On the free plan the service sleeps when idle, so the first request after a
+nap pays both the container cold start and the ~3s dataset warm-up.
 
 ## The landing page
 

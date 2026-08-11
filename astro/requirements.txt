@@ -11,3 +11,4 @@ anthropic>=0.121,<1
 # Web
 flask>=3.0,<4
 flask-cors>=6.0,<7
+gunicorn>=21.2,<24

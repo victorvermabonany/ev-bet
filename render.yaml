@@ -1,0 +1,33 @@
+# Render blueprint for the Transit career-astrology app (astro/).
+#
+# This does NOT touch the existing ev-bet service. That service was created
+# manually in the Render dashboard and keeps using the root Procfile; a
+# blueprint only ever affects services you explicitly create from it. The two
+# run side by side as separate services off the same repo.
+#
+# To deploy: Render dashboard -> New -> Blueprint -> pick this repo and the
+# branch, then Apply. Set ANTHROPIC_API_KEY on the service afterwards if you
+# want the AI reading; without it the app still calculates every chart and
+# falls back to its built-in template reader.
+
+services:
+  - type: web
+    name: transit-astro
+    runtime: python
+    plan: free
+    branch: claude/career-astrology-app-sgt5t7
+    rootDir: astro
+    buildCommand: pip install -r requirements.txt
+    # One worker, not two. The process holds ~180 MB resident once the city
+    # index and timezone dataset are warm, so two workers would sit around
+    # 360 MB and risk the OOM killer on the 512 MB free plan. Threads give
+    # concurrency instead; a chart takes ~0.5s of CPU, and the ephemeris calls
+    # are serialised behind a lock anyway.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Set this in the dashboard, not here — never commit a key.
+      - key: ANTHROPIC_API_KEY
+        sync: false
