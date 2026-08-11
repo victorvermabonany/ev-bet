@@ -8,3 +8,4 @@ dist/
 ios/
 android/
 npm-debug.log*
+.pytest_cache/

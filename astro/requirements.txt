@@ -1,0 +1,13 @@
+# Career astrology reader
+
+# Chart calculation
+pyswisseph>=2.10.3,<3
+timezonefinder>=8.0,<9
+geonamescache>=3.0,<4
+
+# Interpretation
+anthropic>=0.121,<1
+
+# Web
+flask>=3.0,<4
+flask-cors>=6.0,<7

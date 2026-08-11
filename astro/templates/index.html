@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tenth House — career astrology, calculated</title>
+<meta name="description" content="A real birth chart, read for one thing: your career and when to move.">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="wordmark">Tenth<span>·</span>House</div>
+    <div class="masthead-note" id="engine-note">Swiss Ephemeris · positions calculated locally</div>
+  </header>
+</div>
+
+<!-- ---------- intake ---------- -->
+<main id="view-intake">
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Career astrology</div>
+      <h1>Your chart has a <em>tenth house</em>. Most apps never mention it.</h1>
+      <p class="hero-sub">
+        We calculate your real birth chart from astronomical data, then read the parts
+        that actually speak to work — the 10th house, Saturn, and the transits moving
+        across them right now. Built for one question: what to do about your career, and when.
+      </p>
+    </section>
+
+    <section class="panel">
+      <div class="field-grid">
+        <div class="field full">
+          <label for="name">First name <span class="hint">optional</span></label>
+          <input type="text" id="name" placeholder="What should we call you?" autocomplete="given-name">
+        </div>
+
+        <div class="field">
+          <label for="date">Birth date</label>
+          <input type="date" id="date" required>
+        </div>
+
+        <div class="field">
+          <label for="time">Birth time</label>
+          <input type="time" id="time" value="12:00">
+          <label class="check">
+            <input type="checkbox" id="time-unknown">
+            I don't know my birth time
+          </label>
+        </div>
+
+        <div class="field full">
+          <label for="place">Birth place</label>
+          <input type="text" id="place" placeholder="City of birth — start typing"
+                 autocomplete="off" spellcheck="false">
+          <div class="suggestions" id="suggestions"></div>
+          <span class="hint" id="place-hint"></span>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-primary" id="submit">Calculate my chart</button>
+        <span class="form-note">Nothing is stored. Your birth data never leaves this session.</span>
+      </div>
+
+      <div class="error" id="error"></div>
+    </section>
+
+    <section class="credibility">
+      <div class="cred">
+        <h4>Real positions, not vibes</h4>
+        <p>Every degree comes from the Swiss Ephemeris — the same calculation engine
+           professional astrologers use. We show you the raw numbers underneath every claim.</p>
+      </div>
+      <div class="cred">
+        <h4>Career, not horoscopes</h4>
+        <p>No daily affirmations, no compatibility quiz. The 10th house, Saturn,
+           the 2nd and 6th, and the transits currently hitting them.</p>
+      </div>
+      <div class="cred">
+        <h4>Dates you can act on</h4>
+        <p>Transit windows with real start, exact, and end dates — so timing a
+           negotiation or a resignation stops being a guess.</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ---------- loading ---------- -->
+<div id="view-loading" class="hidden">
+  <div class="wrap loading">
+    <div class="orbit"></div>
+    <h2 id="loading-title">Calculating your chart…</h2>
+    <p id="loading-sub">Finding planetary positions for your exact birth moment.</p>
+  </div>
+</div>
+
+<!-- ---------- results ---------- -->
+<main id="view-results" class="hidden">
+  <div class="wrap results">
+
+    <div class="result-head">
+      <div class="eyebrow" id="tier-label">Your career reading</div>
+      <h1 id="headline"></h1>
+      <div class="birth-line" id="birth-line"></div>
+    </div>
+
+    <div class="notice hidden" id="no-time-notice">
+      No birth time given, so houses, your Midheaven and your Ascendant can't be
+      calculated — this reading works from signs and aspects only. Adding a birth
+      time later will sharpen it considerably.
+    </div>
+
+    <div class="notice hidden" id="offline-notice">
+      Generated from your real calculated chart using the built-in template reader.
+      The chart data is exact; only the writing is templated. Set an
+      <code>ANTHROPIC_API_KEY</code> to enable the full interpretation.
+    </div>
+
+    <section class="block">
+      <div class="block-label">The read</div>
+      <p class="lede" id="core-read"></p>
+    </section>
+
+    <section class="block">
+      <div class="block-label">What you have going for you</div>
+      <div class="cards" id="strengths"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-label">Where the friction is</div>
+      <div class="cards" id="friction"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-label">Timing</div>
+      <div id="timing"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-label">Do this next</div>
+      <div class="next-step">
+        <h3>Your next move</h3>
+        <p id="next-step"></p>
+      </div>
+    </section>
+
+    <section class="block" id="upsell-block">
+      <div class="upsell">
+        <h3>Go deeper</h3>
+        <p>
+          The full reading adds your complete transit calendar for the next 18 months,
+          your Saturn return window, more of what's working against you, and lets you
+          ask about a specific decision.
+        </p>
+        <button class="btn-primary" id="unlock">Unlock the full reading</button>
+        <div class="upsell-price">{{ price_label }} · cancel anytime · this demo unlocks instantly</div>
+      </div>
+    </section>
+
+    <section class="block hidden" id="ask-block">
+      <div class="block-label">Ask about a decision</div>
+      <div class="ask">
+        <h3>Something specific on your mind?</h3>
+        <p class="sub">Ask about an offer, a negotiation, a resignation, or a pivot.
+           Answers are grounded in your calculated chart and current transits.</p>
+        <div class="chips">
+          <button class="chip">Should I take this offer now?</button>
+          <button class="chip">When should I ask for a raise?</button>
+          <button class="chip">Is this a good time to quit?</button>
+          <button class="chip">Should I pivot careers?</button>
+        </div>
+        <textarea id="question" placeholder="Type your question…" maxlength="500"></textarea>
+        <div class="form-actions">
+          <button class="btn-primary" id="ask">Ask</button>
+        </div>
+        <div class="answer" id="answer"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-label">The chart underneath</div>
+      <div class="receipts">
+        <div class="angles" id="angles"></div>
+        <div class="receipts-grid" id="receipts"></div>
+        <div class="receipts-foot" id="receipts-foot"></div>
+      </div>
+    </section>
+
+    <div class="form-actions">
+      <button class="btn-secondary" id="restart">Start over</button>
+    </div>
+  </div>
+</main>
+
+<div class="wrap">
+  <footer class="footer">
+    <span>Tenth House — career astrology, calculated.</span>
+    <span>For reflection, not prediction. Career decisions are yours.</span>
+  </footer>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
