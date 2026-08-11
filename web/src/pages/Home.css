@@ -1,0 +1,38 @@
+.home {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* A warm wash of light behind the headline — keeps the cream from reading
+ * flat without introducing a hard shape. */
+.home__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    52% 44% at 50% 44%,
+    rgba(194, 96, 47, 0.13) 0%,
+    rgba(194, 96, 47, 0.05) 46%,
+    transparent 74%
+  );
+  pointer-events: none;
+}
+
+.home__inner {
+  position: relative;
+  padding-block: var(--space-4xl);
+}
+
+.home__wordmark {
+  font-variation-settings: 'SOFT' 60, 'WONK' 1, 'opsz' 144;
+  letter-spacing: -0.03em;
+}
+
+.home__actions {
+  justify-content: center;
+  margin-top: var(--space-2xs);
+}

@@ -1,0 +1,21 @@
+/*
+ * Theme entrypoint. Import this once (see src/main.jsx) and every screen
+ * built afterwards inherits the system automatically.
+ *
+ * Fonts are bundled locally via @fontsource so there is no runtime request
+ * to Google Fonts and the app renders identically offline / in a webview.
+ */
+
+/* Fraunces — variable serif for headlines.
+ * `full.css` rather than the default `index.css`: the default ships the
+ * weight axis only, and the character of this typeface lives in the SOFT
+ * (rounded terminals), WONK (friendlier glyphs) and opsz (optical size)
+ * axes that the tokens rely on. Costs ~85KB more on the latin subset,
+ * which is the point of the design. */
+@import '@fontsource-variable/fraunces/full.css';
+
+/* Inter — variable sans for body copy, UI and data */
+@import '@fontsource-variable/inter/index.css';
+
+@import './tokens.css';
+@import './base.css';

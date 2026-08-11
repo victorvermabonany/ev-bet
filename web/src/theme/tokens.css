@@ -1,0 +1,133 @@
+/*
+ * Design tokens — the single source of truth for the EV Bet visual system.
+ *
+ * Nothing in the app should hardcode a colour, radius, shadow or font.
+ * Reach for a var(--...) from this file instead, so the whole product can be
+ * re-tuned from one place.
+ *
+ * Direction: warm editorial. Cream paper, terracotta ink, serif headlines
+ * with room to breathe. Calm magazine, not tech dashboard.
+ */
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Typeface
+   * ------------------------------------------------------------------ */
+  --font-serif: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  /* Fraunces is a variable serif — these axes give the headlines their
+   * warmth. `soft` rounds the terminals, `wonk` allows the friendlier
+   * single-storey glyphs. */
+  --font-serif-settings: 'SOFT' 40, 'WONK' 1, 'opsz' 48;
+
+  /* ---------------------------------------------------------------------
+   * Colour — warm off-white paper, warm near-black ink, terracotta accent
+   * ------------------------------------------------------------------ */
+
+  /* Surfaces, lightest to most recessed */
+  --color-canvas: #fbf6ee;        /* page background — warm cream */
+  --color-surface: #fffdf9;       /* raised cards */
+  --color-surface-sunken: #f4ebdf; /* wells, inset panels, subtle fills */
+
+  /* Text */
+  --color-ink: #2c2018;           /* warm near-black, headlines + body */
+  --color-ink-muted: #6d5c4d;     /* secondary copy */
+  --color-ink-subtle: #9a8878;    /* captions, eyebrows, metadata */
+  --color-ink-inverse: #fffdf9;   /* text on accent fills */
+
+  /* Accent — terracotta */
+  --color-accent: #c2602f;
+  --color-accent-strong: #a44c21; /* hover / pressed */
+  --color-accent-soft: #f6e5d8;   /* tinted backgrounds */
+  --color-accent-ring: rgba(194, 96, 47, 0.32); /* focus rings */
+
+  /* Supporting hues, kept in the same warm family */
+  --color-olive: #6f7a52;         /* positive / value */
+  --color-clay: #9c6b4f;          /* neutral highlight */
+
+  /* Lines and edges — warm-tinted, never pure grey */
+  --color-line: rgba(44, 32, 24, 0.10);
+  --color-line-strong: rgba(44, 32, 24, 0.18);
+
+  /* ---------------------------------------------------------------------
+   * Type scale — fluid, generous. Headlines are meant to feel large.
+   * ------------------------------------------------------------------ */
+  --text-xs: 0.75rem;    /* 12px — eyebrows, labels */
+  --text-sm: 0.875rem;   /* 14px — captions, fine print */
+  --text-base: 1rem;     /* 16px — body */
+  --text-md: 1.0625rem;  /* 17px — comfortable reading body */
+  --text-lg: clamp(1.125rem, 0.4vw + 1.03rem, 1.3125rem);
+  --text-xl: clamp(1.375rem, 0.8vw + 1.19rem, 1.75rem);
+  --text-2xl: clamp(1.75rem, 1.4vw + 1.42rem, 2.375rem);
+  --text-3xl: clamp(2.25rem, 2.6vw + 1.64rem, 3.25rem);
+  --text-4xl: clamp(2.75rem, 4.6vw + 1.67rem, 4.75rem);
+  --text-5xl: clamp(3.25rem, 6.4vw + 1.75rem, 6.5rem);
+
+  /* Weights — Fraunces reads best fairly light at display sizes */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Line heights */
+  --leading-tight: 1.04;   /* display headlines */
+  --leading-snug: 1.2;     /* section headings */
+  --leading-normal: 1.5;   /* UI text */
+  --leading-relaxed: 1.65; /* body prose */
+
+  /* Letter spacing */
+  --tracking-tight: -0.022em;  /* large serif display */
+  --tracking-normal: 0em;
+  --tracking-wide: 0.02em;
+  --tracking-widest: 0.16em;   /* small caps eyebrows */
+
+  /* ---------------------------------------------------------------------
+   * Spacing — 4px base, with room to breathe at the top end
+   * ------------------------------------------------------------------ */
+  --space-3xs: 0.25rem;  /* 4 */
+  --space-2xs: 0.5rem;   /* 8 */
+  --space-xs: 0.75rem;   /* 12 */
+  --space-sm: 1rem;      /* 16 */
+  --space-md: 1.5rem;    /* 24 */
+  --space-lg: 2rem;      /* 32 */
+  --space-xl: 3rem;      /* 48 */
+  --space-2xl: 4rem;     /* 64 */
+  --space-3xl: 6rem;     /* 96 */
+  --space-4xl: 8rem;     /* 128 */
+
+  /* Layout */
+  --measure-prose: 34ch;     /* comfortable reading width */
+  --width-content: 68rem;    /* standard page container */
+  --width-narrow: 46rem;     /* centred editorial column */
+  --gutter: clamp(var(--space-md), 5vw, var(--space-3xl));
+
+  /* ---------------------------------------------------------------------
+   * Shape — soft and rounded everywhere. No sharp corners.
+   * ------------------------------------------------------------------ */
+  --radius-xs: 0.5rem;    /* 8 — tags, tiny chips */
+  --radius-sm: 0.875rem;  /* 14 — inputs, small controls */
+  --radius-md: 1.25rem;   /* 20 — buttons, icon tiles */
+  --radius-lg: 1.75rem;   /* 28 — cards */
+  --radius-xl: 2.5rem;    /* 40 — feature panels */
+  --radius-pill: 999px;
+
+  /* ---------------------------------------------------------------------
+   * Elevation — warm, diffuse, low-contrast. Light not shadow.
+   * ------------------------------------------------------------------ */
+  --shadow-sm: 0 1px 2px rgba(74, 51, 33, 0.04),
+               0 2px 8px rgba(74, 51, 33, 0.04);
+  --shadow-md: 0 2px 4px rgba(74, 51, 33, 0.04),
+               0 12px 28px -12px rgba(74, 51, 33, 0.14);
+  --shadow-lg: 0 4px 8px rgba(74, 51, 33, 0.04),
+               0 28px 56px -20px rgba(74, 51, 33, 0.18);
+  --shadow-accent: 0 10px 24px -10px rgba(164, 76, 33, 0.55);
+
+  /* ---------------------------------------------------------------------
+   * Motion — unhurried, never bouncy
+   * ------------------------------------------------------------------ */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 420ms;
+}
