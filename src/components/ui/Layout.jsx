@@ -17,9 +17,13 @@ export function Container({ width = 'content', as: Tag = 'div', className = '', 
  * Stack — vertical rhythm from the spacing scale, so screens never invent
  * one-off margins.
  * gap:   '3xs' … '4xl'
- * align: 'start' | 'center' | 'end'
+ * align: 'stretch' (default) | 'start' | 'center' | 'end'
+ *
+ * Defaults to 'stretch' to match how a flex column behaves natively —
+ * children fill the width. Anything narrower ('start') shrinks its children
+ * to their content, which silently breaks nested grids and form fields.
  */
-export function Stack({ gap = 'md', align = 'start', as: Tag = 'div', className = '', children, ...rest }) {
+export function Stack({ gap = 'md', align = 'stretch', as: Tag = 'div', className = '', children, ...rest }) {
   const classes = ['ui-stack', `ui-stack--gap-${gap}`, `ui-stack--align-${align}`, className]
     .filter(Boolean)
     .join(' ')

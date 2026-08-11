@@ -6,4 +6,4 @@
  */
 export const APP_NAME = 'Ember'
 
-export const APP_TAGLINE = 'A calmer place to think.'
+export const APP_TAGLINE = 'Lunch in your neighborhood, with three people worth meeting.'

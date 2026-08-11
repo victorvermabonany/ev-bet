@@ -1,0 +1,61 @@
+.admin__head {
+  justify-content: space-between;
+}
+
+.admin__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-sm);
+}
+
+.admin__stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+}
+
+.admin__stat-value {
+  font-family: var(--font-serif);
+  font-variation-settings: var(--font-serif-settings);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  color: var(--color-ink);
+}
+
+.admin__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--space-md);
+}
+
+.admin__members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.admin__member {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: var(--space-2xs);
+  border-top: 1px solid var(--color-line);
+}
+
+.admin__member:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.admin__member-name {
+  font-size: var(--text-base);
+  color: var(--color-ink);
+}
+
+.admin__member-contact {
+  font-size: var(--text-sm);
+  color: var(--color-ink-subtle);
+}

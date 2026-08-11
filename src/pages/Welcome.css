@@ -1,0 +1,37 @@
+.welcome {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  text-align: center;
+}
+
+.welcome__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    52% 44% at 50% 42%,
+    rgba(194, 96, 47, 0.13) 0%,
+    rgba(194, 96, 47, 0.05) 46%,
+    transparent 74%
+  );
+  pointer-events: none;
+}
+
+.welcome__mark {
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-accent);
+  color: var(--color-ink-inverse);
+  box-shadow: var(--shadow-accent);
+}
+
+.welcome__actions {
+  justify-content: center;
+}

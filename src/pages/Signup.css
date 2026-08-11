@@ -1,0 +1,37 @@
+.signup {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  padding-block: clamp(var(--space-xl), 8vh, var(--space-3xl));
+}
+
+.signup__inner {
+  width: 100%;
+}
+
+.signup__window-group + .signup__window-group {
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-line);
+}
+
+.signup__window-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-xs);
+}
+
+.signup__window-title {
+  font-weight: var(--weight-semibold);
+}
+
+.signup__submit-error {
+  color: var(--color-accent-strong);
+}
+
+.signup__actions {
+  margin-top: var(--space-2xs);
+}

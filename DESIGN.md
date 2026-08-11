@@ -94,3 +94,36 @@ for hovers and `--duration-base` (220ms) for state changes.
 
 One treatment for the whole app, set in `base.css`: a 2px terracotta
 `:focus-visible` ring with 3px of offset. Don't remove it per-component.
+Inputs get a matching soft ring on `:focus`.
+
+## Layout components
+
+`Stack` defaults to `align="stretch"`, matching how a flex column behaves
+natively — children fill the width. Passing `align="start"` shrinks children
+to their content, which silently collapses nested grids and form fields; use
+it only when that's what you want.
+
+Don't put a `className` that sets `display: grid` on a `Row` — `Row` already
+sets `display: flex` and the two are a specificity coin-flip. Use a plain
+`<div>` for anything that lays itself out.
+
+## Forms
+
+`Field` is the shell for a labelled control; `Fieldset` is the same shell for
+a group of checkboxes, where `<legend>` is correct and `<label>` isn't. Both
+take a render function so the control gets the generated `id` and the
+`aria-describedby` / `aria-invalid` wiring:
+
+```jsx
+<Field label="Your name" error={errors.name}>
+  {(props) => <Input {...props} value={form.name} onChange={…} />}
+</Field>
+```
+
+Controls are **required by default**. Pass `required={false}` to mark one
+optional, so a forgotten prop can't quietly mislabel a required field.
+
+Validation rules live in `shared/validation.js` and run in both places: the
+client for inline errors, the server so it never trusts the client. Errors
+stay quiet until the first submit attempt, then track the form live so a
+message clears the moment it's fixed.

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import { APP_NAME, APP_TAGLINE } from '../config.js'
 import { Button, Container, Heading, Row, Stack, Text } from '../components/ui'
 import './Home.css'
@@ -20,7 +22,9 @@ export default function Home() {
           </Stack>
 
           <Row gap="sm" align="center" className="home__actions">
-            <Button size="lg">Get Started</Button>
+            <Button as={Link} to="/signup" size="lg">
+              Get Started
+            </Button>
           </Row>
         </Stack>
       </Container>

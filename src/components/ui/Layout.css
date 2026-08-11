@@ -29,6 +29,8 @@
 .ui-stack--align-start { align-items: flex-start; }
 .ui-stack--align-center { align-items: center; text-align: center; }
 .ui-stack--align-end { align-items: flex-end; }
+/* Children fill the width — what form fields and full-bleed panels want. */
+.ui-stack--align-stretch { align-items: stretch; }
 
 /* Row --------------------------------------------------------------- */
 .ui-row {

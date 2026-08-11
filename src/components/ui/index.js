@@ -1,4 +1,6 @@
 export { default as Button } from './Button.jsx'
 export { default as Card } from './Card.jsx'
+export { default as Field, Fieldset } from './Field.jsx'
+export { default as Input, Select, Checkbox } from './Input.jsx'
 export { Container, Stack, Row, Section } from './Layout.jsx'
 export { Heading, Text, Eyebrow } from './Typography.jsx'
