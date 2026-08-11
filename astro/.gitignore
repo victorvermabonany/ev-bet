@@ -1,0 +1,3 @@
+# Entitlement store -- local runtime state, never committed
+*.db
+*.db-journal

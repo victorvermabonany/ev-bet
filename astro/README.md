@@ -269,8 +269,11 @@ webfont that silently falls back would undo half the identity.
 |---|---|
 | `GET /api/places?q=` | Offline city search (34k cities) |
 | `POST /api/chart` | Full chart, career profile, timing |
-| `POST /api/reading` | Generated reading (`tier`: `free` \| `paid`) |
-| `POST /api/question` | Streaming answer to one career question (SSE) |
+| `POST /api/reading` | Generated reading — tier decided **server-side**, never by the caller |
+| `POST /api/question` | Streaming answer to one career question (SSE); `402` without a membership |
+| `GET /api/entitlement` | What this session may see — the UI's only source of truth |
+| `POST /api/checkout` | Creates a Whop checkout configuration carrying this session's token |
+| `POST /api/whop/webhook` | Signed membership events from Whop; the only thing that grants access |
 | `GET /health`, `/api/config` | Status |
 
 ## Pricing and checkout (Whop)
@@ -303,31 +306,93 @@ devtools.
 
 **The checkout modal** is Whop's embedded overlay
 (`js.whop.com/static/checkout/loader.js`). Clicking the CTA appends an element
-carrying `data-whop-checkout-plan-id` and `data-whop-checkout-overlay`; the
+carrying `data-whop-checkout-session` and `data-whop-checkout-overlay`; the
 loader runs a MutationObserver, so an element added at click time mounts and
-opens. Completion arrives as a `postMessage`, and the handler **checks the
-event origin is a whop.com host** before unlocking — a page-local message with
-the same shape is ignored.
+opens. The `postMessage` that arrives on completion only makes the UI re-ask
+the server — it cannot itself unlock anything.
 
-If the plan IDs are unset, or the loader is blocked, the CTA falls back to the
-demo unlock so the app is still explorable.
+It has to be `data-whop-checkout-session` rather than the simpler
+`data-whop-checkout-plan-id`, and that constraint shaped the design below: the
+embed has **no metadata attribute** (reading the shipped `index.js`, the only
+`data-*` hooks it reads are `plan-id`, `session`, `overlay` and `style-*`). A
+server-created *checkout configuration* is the one thing that can carry
+metadata into a purchase — hence `POST /api/checkout` and `whop_api.py`.
 
-### Not done yet: server-side entitlement
+## How the paywall is actually enforced
 
-The checkout is wired, but **the paywall is not yet enforced against a real
-purchase**. `POST /api/reading` with `tier: "paid"` is unauthenticated — the
-unlock is currently driven by a client-side event, so anyone who can craft a
-request can get the paid reading. Making this real needs, roughly:
+The tier a caller receives is derived entirely on the server. `POST
+/api/reading` **ignores any `tier` in the request body**; it reads the session
+cookie, looks up a membership recorded by a signed webhook, and returns
+whatever that session has genuinely paid for.
 
-1. A Whop webhook endpoint receiving `membership.went_valid` / payment events.
-2. A session or token identifying the buyer, since the app deliberately stores
-   nothing and has no accounts today.
-3. `/api/reading` verifying an active membership (`whop memberships list`)
-   before honouring `tier: "paid"`.
+### Identity: an anonymous session token
 
-Step 2 is the real design decision, because it is the first thing that would
-give this app persistent user state. Worth deciding deliberately rather than
-by accident.
+No email, no password, no account. First request mints a random token stored in
+an httpOnly, SameSite=Lax cookie (`transit_sid`), and a `(session_id,
+membership_id)` row is what "being a subscriber" means.
+
+Whop already authenticates the buyer, so an email or magic-link signup would
+rebuild an identity system we get for free and create two sources of truth
+about who paid. Magic links also need an email-sending dependency, and an email
+gate before checkout adds friction at the worst possible moment. The
+session→membership table is the same table we would keep if Whop OAuth or magic
+links were added later, so this is a foundation rather than a detour.
+
+**The known gap:** clearing cookies, or switching browser or device, loses
+access until there is a restore flow. Whop OAuth ("log in with Whop") is the
+natural fix and re-uses the same table — it just adds a second way to arrive at
+a `session_id`. Worth building before this takes real money from real people.
+
+### The flow
+
+```
+GET /            -> mints transit_sid, httpOnly cookie
+POST /api/checkout   -> Whop checkout configuration with metadata {"sid": …}
+   (user pays on Whop's overlay)
+POST /api/whop/webhook  <- membership.went_valid, HMAC-signed
+                        -> row: (sid, membership_id, status, valid_until)
+POST /api/reading    -> looks up sid, returns paid tier
+```
+
+### What is deliberately strict
+
+- **The webhook fails closed.** With no `WHOP_WEBHOOK_SECRET` set it rejects
+  everything. An unauthenticated endpoint that grants paid access would be a
+  worse hole than the client-side flag it replaces, because nobody would ever
+  see it being used.
+- **Signatures are compared with `hmac.compare_digest`** over the raw body,
+  before any parsing.
+- **`trialing` counts as entitled.** Gating on `active` alone would lock out
+  every 3-day-trial user — exactly the audience the highlighted plan targets.
+- **Expiry is enforced independently of webhooks.** `valid_until` is checked on
+  every read, so a webhook Whop never successfully delivers cannot leave access
+  switched on forever.
+- **No paid content reaches the client and gets hidden with CSS.** The tier cut
+  happens in `build_facts()` before generation: free tier receives 1 transit
+  window, paid receives up to 8. The blurred shapes in the locked sections are
+  skeletons generated in the browser.
+
+### Verifying it
+
+`tests/test_entitlements.py` covers this in-process (31 tests). To prove it
+against a running server end to end:
+
+```bash
+ASTRO_DB_PATH=/tmp/live.db WHOP_WEBHOOK_SECRET=live-secret-abc python app.py &
+sh scripts/verify_paywall.sh
+```
+
+18 checks, all passing as of this commit — unauthenticated `tier: "paid"` comes
+back free; a wrongly-signed webhook is rejected with `401` and grants nothing;
+a correctly-signed one flips that one session to paid; a different session and
+a guessed token both stay free; and a `went_invalid` event revokes access.
+
+### Before this handles real money
+
+The grants table is SQLite at `ASTRO_DB_PATH`. **Render's free plan has an
+ephemeral filesystem**, so it is wiped on every deploy and restart — paying
+customers would silently lose access. Attach a persistent disk, or point the
+app at managed Postgres, before launch.
 
 ## Configuration
 
@@ -341,7 +406,14 @@ by accident.
 | `WHOP_PRODUCT_ID` | — | Product the plans hang off |
 | `WHOP_WEEKLY_PRICE` / `WHOP_ANNUAL_PRICE` | `$7.99` / `$89` | Display copy only |
 | `WHOP_TRIAL_DAYS` | `3` | Trial length shown on the badge |
+| `WHOP_API_KEY` | — | **Required for real checkout** — creates the checkout configuration that carries the session token |
+| `WHOP_WEBHOOK_SECRET` | — | **Required to grant access** — HMAC secret for `/api/whop/webhook`. Unset means every webhook is rejected |
+| `ASTRO_DB_PATH` | `entitlements.db` | SQLite file holding membership grants. Must be on a persistent disk in production |
 | `PORT` | `5001` | Server port |
+
+Point Whop's webhook at `https://<your-host>/api/whop/webhook` and subscribe to
+the membership events (`membership.went_valid`, `membership.went_invalid`).
+Copy the signing secret it gives you into `WHOP_WEBHOOK_SECRET`.
 
 ## Where the PRD's open questions landed
 

@@ -400,16 +400,19 @@ def test_chart_endpoint_returns_a_full_chart(client):
     assert body["timing"]["windows"]
 
 
-def test_reading_endpoint_tiers(client):
-    free = client.post("/api/reading", json={**PAYLOAD, "tier": "free"}).get_json()
-    paid = client.post("/api/reading", json={**PAYLOAD, "tier": "paid"}).get_json()
-    assert free["tier"] == "free" and paid["tier"] == "paid"
-    assert len(paid["content"]["strengths"]) > len(free["content"]["strengths"])
+def test_reading_tier_is_decided_by_the_server(client):
+    """The client used to pick its own tier. It no longer can.
 
-
-def test_unknown_tier_defaults_to_free(client):
-    body = client.post("/api/reading", json={**PAYLOAD, "tier": "enterprise"}).get_json()
-    assert body["tier"] == "free"
+    Paid access now requires a membership recorded by a signed Whop webhook;
+    full coverage of that path lives in test_entitlements.py.
+    """
+    for requested in ("free", "paid", "enterprise", None):
+        payload = dict(PAYLOAD)
+        if requested is not None:
+            payload["tier"] = requested
+        body = client.post("/api/reading", json=payload).get_json()
+        assert body["tier"] == "free", f"tier={requested!r} must not grant paid access"
+        assert body["entitlement"]["entitled"] is False
 
 
 @pytest.mark.parametrize(
@@ -439,7 +442,7 @@ def test_time_unknown_response_omits_angle_claims(client):
     *position* for an angle, or citing one as evidence.
     """
     body = client.post(
-        "/api/reading", json={**PAYLOAD, "timeKnown": False, "tier": "paid"}
+        "/api/reading", json={**PAYLOAD, "timeKnown": False}
     ).get_json()
     content = body["content"]
 
@@ -463,13 +466,14 @@ def test_question_requires_a_question(client):
     assert client.post("/api/question", json=long_question).status_code == 400
 
 
-def test_question_streams_server_sent_events(client):
+def test_question_endpoint_is_paid_only(client):
+    """Asking about a decision is a paid feature, so it needs a membership.
+
+    The streaming behaviour itself is covered in test_entitlements.py, where a
+    session can be given one.
+    """
     response = client.post("/api/question", json={**PAYLOAD, "question": "Should I quit?"})
-    assert response.status_code == 200
-    assert response.mimetype == "text/event-stream"
-    body = response.get_data(as_text=True)
-    assert body.startswith("data: ")
-    assert body.rstrip().endswith("[DONE]")
+    assert response.status_code == 402
 
 
 def test_repeated_requests_are_cached(client):

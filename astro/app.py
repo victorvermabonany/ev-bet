@@ -17,10 +17,10 @@ import logging
 import os
 from collections import OrderedDict
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, g, jsonify, render_template, request
 from flask_cors import CORS
 
-from astrology import career, places, reading
+from astrology import career, entitlements, places, reading, whop_api
 from astrology.chart import BirthData, build_chart
 
 logging.basicConfig(level=logging.INFO)
@@ -34,8 +34,8 @@ _chart_cache: OrderedDict[str, tuple] = OrderedDict()
 
 # Whop pricing. Plan IDs come from astro/scripts/setup_whop.sh; the labels live
 # here so the paywall copy has one source of truth and can change without a
-# deploy. If the plan IDs are unset the paywall still renders and falls back to
-# its demo unlock, so the app is never broken by missing commerce config.
+# deploy. If the plan IDs are unset the paywall still renders and simply says
+# checkout is unconfigured -- it never grants access as a fallback.
 WHOP_PLANS = [
     {
         "key": "weekly",
@@ -169,13 +169,48 @@ def whop_config() -> dict:
         "productId": os.environ.get("WHOP_PRODUCT_ID", ""),
         "plans": WHOP_PLANS,
         # False until the plan IDs exist, which is what the front end keys off
-        # to decide between a real checkout and the demo unlock.
-        "configured": all(p["planId"] for p in WHOP_PLANS),
+        # to decide whether the CTA can open a real checkout at all.
+        # Checkout needs both the plan IDs and a server-side API key: the
+        # metadata that links a purchase to a session can only be attached by a
+        # checkout configuration, which the server has to create.
+        "configured": all(p["planId"] for p in WHOP_PLANS) and whop_api.configured(),
     }
+
+
+def session_id() -> str:
+    """The caller's session token, minted on first sight.
+
+    Stashed on the request so a single request only ever mints one, and the
+    after-request hook knows whether it needs to set the cookie.
+    """
+    existing = request.cookies.get(entitlements.COOKIE_NAME)
+    if existing:
+        return existing
+    minted = getattr(g, "new_session_id", None)
+    if minted is None:
+        minted = entitlements.new_session_id()
+        g.new_session_id = minted
+    return minted
+
+
+@app.after_request
+def _persist_session(response):
+    minted = getattr(g, "new_session_id", None)
+    if minted:
+        response.set_cookie(
+            entitlements.COOKIE_NAME,
+            minted,
+            max_age=entitlements.COOKIE_MAX_AGE,
+            httponly=True,        # never readable from JavaScript
+            samesite="Lax",       # survives the return trip from Whop checkout
+            secure=not app.debug and request.is_secure,
+        )
+    return response
 
 
 @app.route("/")
 def index():
+    session_id()  # ensure a visitor has a token before they reach checkout
     return render_template("index.html")
 
 
@@ -208,11 +243,20 @@ def api_chart():
 
 @app.route("/api/reading", methods=["POST"])
 def api_reading():
+    """Return a reading at whatever tier this session has actually paid for.
+
+    The client no longer has any say in this. It used to pass `tier`, which
+    meant the paywall was one crafted request away from being bypassed; the
+    parameter is now ignored entirely and the tier is derived from a membership
+    recorded by a signed Whop webhook.
+    """
     payload = request.get_json(silent=True) or {}
-    tier = "paid" if payload.get("tier") == "paid" else "free"
+    access = entitlements.entitlement(session_id())
+    tier = "paid" if access["entitled"] else "free"
+
     chart, profile, timing = _parse_birth(payload)
     result = reading.generate(chart, profile, timing, tier)
-    return jsonify(result.to_dict())
+    return jsonify({**result.to_dict(), "entitlement": access})
 
 
 @app.route("/api/question", methods=["POST"])
@@ -224,6 +268,9 @@ def api_question():
         raise BadRequest("question is required")
     if len(question) > 500:
         raise BadRequest("question must be under 500 characters")
+
+    if not entitlements.entitlement(session_id())["entitled"]:
+        return jsonify({"error": "This needs an active subscription."}), 402
 
     chart, profile, timing = _parse_birth(payload)
 
@@ -243,6 +290,70 @@ def api_question():
     )
 
 
+@app.route("/api/entitlement")
+def api_entitlement():
+    """What this session is allowed to see. The UI's only source of truth."""
+    return jsonify(entitlements.entitlement(session_id()))
+
+
+@app.route("/api/checkout", methods=["POST"])
+def api_checkout():
+    """Hand the browser the metadata to attach to a Whop checkout.
+
+    The session token travels into checkout as metadata so Whop's webhook can
+    hand it back and tell us which visitor just paid. This is the whole of the
+    identity mechanism: no password, no email, no account.
+    """
+    payload = request.get_json(silent=True) or {}
+    plan_key = payload.get("plan")
+    plan = next((p for p in WHOP_PLANS if p["key"] == plan_key), None)
+    if plan is None or not plan["planId"]:
+        raise BadRequest("unknown or unconfigured plan")
+
+    sid = session_id()
+    try:
+        checkout_id = whop_api.create_checkout_configuration(
+            plan["planId"], {"sid": sid}
+        )
+    except whop_api.WhopError as exc:
+        log.error("could not create checkout configuration: %s", exc)
+        return jsonify({"error": "checkout is unavailable right now"}), 502
+
+    return jsonify({"checkoutSessionId": checkout_id, "planId": plan["planId"]})
+
+
+@app.route("/api/whop/webhook", methods=["POST"])
+def api_whop_webhook():
+    """Receive membership events from Whop.
+
+    This endpoint is the only thing that can grant paid access, so it verifies
+    an HMAC signature over the raw body and fails closed: with no secret
+    configured it rejects everything. An unauthenticated endpoint that grants
+    access would be a worse hole than the client-side flag it replaces, because
+    nobody would ever see it happen.
+    """
+    raw = request.get_data()
+    ok, reason = entitlements.verify_webhook(raw, request.headers)
+    if not ok:
+        log.warning("rejected whop webhook: %s", reason)
+        return jsonify({"error": "invalid signature"}), 401
+
+    try:
+        payload = json.loads(raw.decode() or "{}")
+    except ValueError:
+        raise BadRequest("body must be JSON") from None
+
+    result = entitlements.apply_event(payload)
+    log.info(
+        "whop webhook %s -> %s",
+        result.get("event"),
+        result.get("action") or result.get("reason"),
+    )
+    # Always 200 on a verified event: a non-2xx makes Whop retry, and retrying
+    # will not fix a payload we could not match to anything.
+    return jsonify({"received": True, "applied": result.get("applied", False)})
+
+
 @app.route("/api/config")
 def api_config():
     return jsonify({
@@ -250,6 +361,9 @@ def api_config():
         "voice": reading.VOICE,
         "whop": whop_config(),
     })
+
+
+entitlements.init()
 
 
 if __name__ == "__main__":

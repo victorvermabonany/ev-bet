@@ -17,8 +17,9 @@
     place: null,      // the picked place, incl. coordinates + timezone
     tier: "free",
     chart: null,
-    whop: null,     // pricing config from /api/config
-    plan: null,     // the currently selected plan
+    whop: null,        // pricing config from /api/config
+    plan: null,        // the currently selected plan
+    entitlement: null, // what the SERVER says this session may see
   };
 
   // ---------- place autocomplete ----------
@@ -168,7 +169,7 @@
       $("loading-title").textContent = "Reading your tenth house.";
       $("loading-sub").textContent = "Finding the career placements and the transits crossing them.";
 
-      const reading = await postJSON("/api/reading", { ...state.birth, tier: "free" });
+      const reading = await postJSON("/api/reading", state.birth);
       renderResults(chartResponse, reading);
       show("results");
     } catch (error) {
@@ -400,21 +401,58 @@
   /* Opening the Whop overlay: append an element carrying the plan id and the
      overlay attribute. The loader installs a MutationObserver, so an element
      added now is picked up and mounted without re-running the script. */
-  function openWhopCheckout(planId) {
-    document.querySelectorAll("[data-whop-checkout-plan-id]").forEach((n) => n.remove());
+  function openWhopCheckout(checkoutSessionId) {
+    document
+      .querySelectorAll("[data-whop-checkout-session], [data-whop-checkout-plan-id]")
+      .forEach((node) => node.remove());
     const mount = document.createElement("div");
-    mount.setAttribute("data-whop-checkout-plan-id", planId);
+    // The session attribute, not plan-id: only a checkout configuration carries
+    // the metadata that links this purchase back to our session token.
+    mount.setAttribute("data-whop-checkout-session", checkoutSessionId);
     mount.setAttribute("data-whop-checkout-overlay", "true");
     mount.setAttribute("data-whop-checkout-theme", "light");
     document.body.appendChild(mount);
     return mount;
   }
 
-  async function applyPaidReading() {
-    const reading = await postJSON("/api/reading", { ...state.birth, tier: "paid" });
-    state.tier = "paid";
+  /* Re-fetch the reading. Whatever tier comes back is whatever the server says
+     this session is entitled to -- the client has no way to ask for more. */
+  async function refreshReading() {
+    const reading = await postJSON("/api/reading", state.birth);
+    state.tier = reading.tier;
     renderResults(state.chart, reading);
-    $("ask-block").scrollIntoView({ behavior: "smooth", block: "center" });
+    return reading;
+  }
+
+  /* After checkout the webhook is a separate server-to-server round trip, so
+     entitlement can lag the browser by a moment. Poll briefly rather than
+     assuming, and never unlock on the client's say-so. */
+  async function awaitEntitlement(attempts = 12, delayMs = 1000) {
+    for (let i = 0; i < attempts; i += 1) {
+      const response = await fetch("/api/entitlement");
+      const access = await response.json().catch(() => ({}));
+      if (access.entitled) return access;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return null;
+  }
+
+  async function settleAfterCheckout() {
+    const button = $("unlock");
+    button.disabled = true;
+    button.textContent = "Confirming your subscription…";
+    const access = await awaitEntitlement();
+    if (!access) {
+      button.disabled = false;
+      syncPaywallCopy();
+      $("paywall-note").textContent =
+        "Payment received, but we haven't had confirmation yet. Refresh in a moment.";
+      return;
+    }
+    const reading = await refreshReading();
+    if (reading.tier === "paid") {
+      $("ask-block").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 
   // Whop reports checkout outcomes by posting a message to the host page.
@@ -423,7 +461,7 @@
     const type = event.data && (event.data.event || event.data.type);
     if (type !== "complete" && type !== "success") return;
     try {
-      await applyPaidReading();
+      await settleAfterCheckout();
     } catch (error) {
       alert(`Payment went through, but loading the reading failed: ${error.message}`);
     }
@@ -431,24 +469,28 @@
 
   $("unlock").addEventListener("click", async () => {
     const button = $("unlock");
-    const planId = state.plan && state.plan.planId;
+    const original = button.textContent;
 
-    // Real checkout when the plans exist; otherwise the demo unlock, so the app
-    // is still explorable before anyone has run the Whop setup script.
-    if (state.whop && state.whop.configured && planId && window.wco) {
-      openWhopCheckout(planId);
+    if (!state.whop || !state.whop.configured || !state.plan) {
+      $("paywall-note").textContent =
+        "Checkout isn't configured on this server yet.";
       return;
     }
 
-    const original = button.textContent;
     button.disabled = true;
-    button.textContent = "Unlocking…";
+    button.textContent = "Opening checkout…";
     try {
-      await applyPaidReading();
+      // The server mints a checkout configuration carrying this session's
+      // token, so the webhook can tell us who paid.
+      const checkout = await postJSON("/api/checkout", { plan: state.plan.key });
+      if (!window.wco) throw new Error("Checkout script didn't load. Disable your blocker and retry.");
+      openWhopCheckout(checkout.checkoutSessionId);
+      button.disabled = false;
+      button.textContent = original;
     } catch (error) {
       button.disabled = false;
       button.textContent = original;
-      alert(error.message);
+      $("paywall-note").textContent = error.message;
     }
   });
 
@@ -686,6 +728,10 @@
     .then((response) => response.json())
     .then((config) => {
       state.whop = config.whop || null;
+      fetch("/api/entitlement")
+        .then((r) => r.json())
+        .then((access) => { state.entitlement = access; })
+        .catch(() => {});
       if (!config.aiConfigured) {
         $("engine-note").textContent =
           "Swiss Ephemeris · calculated locally · template reader";
