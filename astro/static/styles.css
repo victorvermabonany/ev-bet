@@ -166,36 +166,231 @@ a { color: var(--terracotta-deep); }
   padding: 0 24px;
 }
 
-/* ---------- masthead ---------- */
+/* ---------- nav ----------
+   Minimal by design: wordmark, two links, one CTA. The single action is
+   repeated here and in the hero and never competes with a second button. */
 
-.masthead {
-  padding: 40px 0 18px;
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: rgba(247, 241, 232, 0.86);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid transparent;
+  transition: background 0.25s, border-color 0.25s;
+}
+
+/* Over the night-sky hero the nav is transparent and inverted; it resolves to
+   the cream bar once you scroll past it. */
+.nav.on-sky {
+  background: transparent;
+  backdrop-filter: none;
+  border-bottom-color: transparent;
+}
+
+.nav.scrolled { border-bottom-color: var(--sand); }
+
+.nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
+  gap: 28px;
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .wordmark {
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: 23px;
   letter-spacing: -0.02em;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
 }
 
 .wordmark svg { display: block; overflow: visible; }
+.wordmark .mark { color: var(--navy); }
 
-.masthead-note {
-  font-size: 12px;
-  color: var(--ink-faint);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-weight: 500;
+.nav-links { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+
+.nav-link {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
+
+.nav-link:hover { color: var(--ink); background: rgba(43, 38, 32, 0.05); }
+
+.dropdown { position: relative; }
+
+.dropdown-toggle-open svg { transform: rotate(180deg); }
+.dropdown svg { transition: transform 0.2s; }
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 190px;
+  background: var(--card);
+  border: 1px solid var(--sand);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift);
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+}
+
+.dropdown-menu.open { display: flex; }
+
+.dropdown-menu a {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+
+.dropdown-menu a:hover { background: var(--terracotta-wash); color: var(--terracotta-deep); }
+
+.btn-sm { padding: 10px 20px; font-size: 14.5px; }
+.btn-lg { padding: 17px 38px; font-size: 17px; }
+
+/* Inverted nav treatment while it sits over the sky. */
+.nav.on-sky .wordmark { color: #f4efe6; }
+.nav.on-sky .wordmark .mark { color: #f4efe6; }
+.nav.on-sky .nav-link { color: #b9c0d0; }
+.nav.on-sky .nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+
+/* ---------- night sky hero ----------
+   The mood arrives before any claim is read. A generated starfield rather than
+   stock imagery: no assets to ship, and it is the sky the chart is calculated
+   from. */
+
+.sky {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(178deg, #131b2e 0%, #1f2a44 42%, #3d3a4a 74%, #7c5c50 90%, var(--cream) 100%);
+  /* Pull up further than the nav can ever be tall, so no strip of page ground
+     shows above it. The excess sits above the document origin and is simply
+     clipped — cheaper and steadier than measuring nav height in JS, which
+     would flash on load and drift when the webfont swaps in. */
+  margin-top: -120px;
+  padding: 244px 0 130px;
+  overflow: hidden;
+}
+
+.starfield {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+}
+
+/* A warm horizon bloom where the night meets the page — the palette's cream
+   and terracotta arriving as light rather than as a block of colour. */
+.sky-glow {
+  position: absolute;
+  left: 50%;
+  bottom: -180px;
+  width: 130%;
+  height: 340px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at 50% 100%,
+              rgba(201, 162, 75, 0.34) 0%,
+              rgba(193, 89, 43, 0.17) 34%,
+              rgba(193, 89, 43, 0) 68%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.sky-inner { position: relative; text-align: center; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(233, 224, 210, 0.22);
+  color: #ded6c8;
+  border-radius: var(--radius-pill);
+  padding: 8px 18px 8px 14px;
+  font-size: 13.5px;
+  letter-spacing: 0.005em;
+  margin-bottom: 34px;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.2);
+}
+
+.sky-headline {
+  font-size: clamp(44px, 7.4vw, 82px);
+  line-height: 1.04;
+  letter-spacing: -0.032em;
+  color: #f6f1e8;
+  margin: 0 auto 26px;
+  max-width: 16ch;
+}
+
+.sky-headline em {
+  font-style: italic;
+  color: var(--gold);
+}
+
+.sky-sub {
+  font-size: 19px;
+  color: #b6bccb;
+  max-width: 48ch;
+  margin: 0 auto 40px;
+}
+
+/* ---------- landing sections ---------- */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 34px;
+  padding: 84px 0 20px;
+}
+
+.step-mark {
+  display: block;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+
+.step h3 { font-size: 21px; margin-bottom: 10px; }
+.step p { font-size: 15.5px; color: var(--ink-soft); }
+
+.limits {
+  max-width: 62ch;
+  margin: 0 auto;
+  padding: 86px 0 100px;
+  text-align: center;
+}
+
+.limits h2 { font-size: clamp(28px, 3.6vw, 38px); margin-bottom: 20px; letter-spacing: -0.02em; }
+.limits p { color: var(--ink-soft); font-size: 17px; margin-bottom: 16px; }
+.limits .btn-primary { margin-top: 22px; }
 
 /* ---------- hero ---------- */
 
@@ -807,12 +1002,33 @@ section.block { margin-bottom: 56px; }
 
 .hidden { display: none !important; }
 
+@media (max-width: 860px) {
+  /* The nav collapses to wordmark + the single CTA. The dropdown targets are
+     all on the landing page anyway, so nothing becomes unreachable — and the
+     PRD's "one action, never buried" survives the small screen intact. */
+  .nav-links { display: none; }
+  .nav-inner { gap: 16px; justify-content: space-between; }
+  .wordmark { margin-right: auto; font-size: 21px; }
+  .btn-sm { padding: 9px 16px; font-size: 14px; }
+}
+
 @media (max-width: 720px) {
   body { font-size: 16px; }
   .wrap { padding: 0 18px; }
   .panel { padding: 24px; }
   .hero { padding: 34px 0 32px; }
   .hero h1 { max-width: 100%; }
+
+  .sky { padding: 204px 0 96px; }
+  .sky-headline { max-width: 100%; }
+  .badge {
+    font-size: 12px;
+    padding: 7px 14px 7px 12px;
+    margin-bottom: 26px;
+    text-align: left;
+  }
+  .steps { grid-template-columns: 1fr; gap: 34px; padding: 60px 0 8px; }
+  .limits { padding: 60px 0 74px; }
   .field-grid { grid-template-columns: 1fr; }
   .credibility { grid-template-columns: 1fr; gap: 24px; }
   .timing-item { grid-template-columns: 1fr; gap: 10px; }

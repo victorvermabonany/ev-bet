@@ -110,6 +110,40 @@ gunicorn --chdir astro app:app --timeout 120 --workers 2
 `--timeout 120` matters: the question endpoint streams, and the transit scan
 takes about half a second of CPU on a cold chart.
 
+## The landing page
+
+`/` opens on a landing page built to the landing PRD; the chart form is step two,
+reached only by the CTA.
+
+- **Minimal nav** — wordmark, two links (one dropdown), one CTA. Below 860px it
+  collapses to wordmark + CTA; the dropdown targets all live on the landing
+  page, so nothing becomes unreachable.
+- **Trust badge** — "Positions from the Swiss Ephemeris — real astronomical
+  data". Deliberately a claim about the calculation engine, which is real and
+  checkable, rather than a user count we would have to invent. The PRD is right
+  that a fabricated stat would undercut the exact mechanic it's borrowing.
+- **Two-clause headline** — "Know when to move." (feeling) / "Real data, not
+  vibes." (capability), the second clause in gold italic.
+- **One CTA, repeated** — "Get your chart" in the nav, the hero, and the closing
+  section. All three do the same thing. There is no competing secondary button
+  anywhere on the page.
+- **Mood before claim** — a full-bleed night sky that warms into the page cream.
+  It's a generated canvas starfield, not stock imagery: nothing to ship, it
+  scales to any viewport, and it's the sky the charts are calculated from. It
+  goes still under `prefers-reduced-motion` and pauses when the tab is hidden.
+- **No logo wall.** The PRD says to leave it out until the numbers are real, so
+  the section does not exist. Add it when there is something true to put in it.
+- **No urgency tactics** — no countdowns, no scarcity. They'd contradict the
+  calm, credible register the rest of the product works in.
+
+## The mark
+
+A chart wheel, its horizon (the Ascendant–Descendant axis), and a body crossing
+the top of the wheel — the Midheaven, which is the career point. Four primitives,
+and between them they state what the product does. Geometric rather than an
+ornate zodiac wheel, and it reappears as the favicon, the step icons, the
+loading spinner, and the faint arc behind the paywall.
+
 ## Design system
 
 Built to the brand kit. The five palette values are exact; everything else is

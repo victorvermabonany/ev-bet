@@ -115,9 +115,13 @@
   // ---------- views ----------
 
   function show(view) {
-    ["intake", "loading", "results"].forEach((name) =>
+    ["landing", "intake", "loading", "results"].forEach((name) =>
       $(`view-${name}`).classList.toggle("hidden", name !== view)
     );
+    // The nav only sits over the night sky on the landing view; everywhere else
+    // it resolves to the cream bar.
+    $("nav").classList.toggle("on-sky", view === "landing");
+    syncNav();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -422,6 +426,142 @@
     $("question").value = "";
     show("intake");
   });
+
+  // ---------- nav ----------
+
+  /* The single CTA, repeated in the nav, the hero, and the closing section.
+     Every one of them does the same thing: open the chart form. */
+  document.querySelectorAll(".nav-cta, .hero-cta").forEach((button) =>
+    button.addEventListener("click", () => {
+      show("intake");
+      setTimeout(() => $("date").focus({ preventScroll: true }), 420);
+    })
+  );
+
+  $("home").addEventListener("click", () => show("landing"));
+
+  const dropdown = $("dropdown");
+  const dropdownToggle = $("dropdown-toggle");
+  const dropdownMenu = $("dropdown-menu");
+
+  function setDropdown(open) {
+    dropdownMenu.classList.toggle("open", open);
+    dropdownToggle.classList.toggle("dropdown-toggle-open", open);
+    dropdownToggle.setAttribute("aria-expanded", String(open));
+  }
+
+  dropdownToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setDropdown(!dropdownMenu.classList.contains("open"));
+  });
+
+  dropdownMenu.addEventListener("click", () => setDropdown(false));
+  document.addEventListener("click", (event) => {
+    if (!dropdown.contains(event.target)) setDropdown(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setDropdown(false);
+  });
+
+  // In-page anchors only mean anything on the landing view.
+  document.querySelectorAll('a[href^="#"]').forEach((link) =>
+    link.addEventListener("click", (event) => {
+      const target = document.getElementById(link.getAttribute("href").slice(1));
+      if (!target) return;
+      event.preventDefault();
+      if ($("view-landing").classList.contains("hidden")) show("landing");
+      requestAnimationFrame(() =>
+        target.scrollIntoView({ behavior: "smooth", block: "start" })
+      );
+    })
+  );
+
+  function syncNav() {
+    const scrolled = window.scrollY > 8;
+    $("nav").classList.toggle("scrolled", scrolled && !$("nav").classList.contains("on-sky"));
+  }
+
+  window.addEventListener("scroll", syncNav, { passive: true });
+
+  // ---------- starfield ----------
+
+  /* Generated rather than shipped as an image: no asset to load, it scales to
+     any viewport, and it is the sky the charts are actually calculated from. */
+  function startStarfield() {
+    const canvas = $("starfield");
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let stars = [];
+    let frame = null;
+
+    function build() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const { width, height } = canvas.getBoundingClientRect();
+      if (!width || !height) return;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      // Denser toward the top: the sky fades into the warm horizon below, so
+      // stars there would fight the glow.
+      const count = Math.round((width * height) / 5200);
+      stars = Array.from({ length: count }, () => {
+        const depth = Math.pow(Math.random(), 1.7);
+        return {
+          x: Math.random() * width,
+          y: depth * height * 0.92,
+          r: 0.35 + Math.random() * 1.15,
+          base: 0.16 + Math.random() * 0.5,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.4 + Math.random() * 0.9,
+        };
+      });
+    }
+
+    function draw(time) {
+      const { width, height } = canvas.getBoundingClientRect();
+      context.clearRect(0, 0, width, height);
+      for (const star of stars) {
+        // Fade stars out as they approach the horizon glow.
+        const fade = 1 - Math.min(1, Math.max(0, (star.y / height - 0.55) / 0.45));
+        const twinkle = still ? 1 : 0.72 + 0.28 * Math.sin(time / 1400 * star.speed + star.phase);
+        context.globalAlpha = star.base * twinkle * fade;
+        context.fillStyle = "#fdf8ee";
+        context.beginPath();
+        context.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.globalAlpha = 1;
+      if (!still) frame = requestAnimationFrame(draw);
+    }
+
+    function restart() {
+      build();
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(draw);
+    }
+
+    restart();
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(restart, 180);
+    });
+
+    // Don't burn frames on a canvas nobody is looking at.
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && frame) {
+        cancelAnimationFrame(frame);
+        frame = null;
+      } else if (!document.hidden && !frame && !still) {
+        frame = requestAnimationFrame(draw);
+      }
+    });
+  }
+
+  startStarfield();
+  $("nav").classList.add("on-sky");
 
   // ---------- boot ----------
 
