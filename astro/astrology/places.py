@@ -265,6 +265,24 @@ COMPILE_WAIT_SECONDS = 75
 _warm_finished = threading.Event()
 
 
+def _release_memory_index() -> None:
+    """Drop the in-memory index once the compiled file is answering queries.
+
+    Several paths can build one -- a compile that took longer than a request
+    was willing to wait, a warm-up that fell back, a copy inherited across a
+    fork -- and each of them is 139 MB held for the life of the worker. Rather
+    than chase every path, converge: the moment a search is served from the
+    compiled file, nothing reads the in-memory copy again, so let it go.
+
+    A concurrent search already holding a reference keeps it alive until it
+    returns, so this cannot pull the index out from under anyone.
+    """
+    global _index_cache
+    if _index_cache is not None:
+        _index_cache = None
+        log.info("released the in-memory city index; serving from the compiled file")
+
+
 def mark_warming() -> None:
     """Claim the warm-up before its thread has started.
 
@@ -430,6 +448,7 @@ def search(query: str, limit: int = 8) -> list[Place]:
 
     conn = _database() or _wait_for_compile()
     if conn is not None:
+        _release_memory_index()
         return _rank(_search_db(conn, city, limit), city, qualifiers, limit)
 
     # No precomputed file (fresh checkout, tests): build the index in memory.

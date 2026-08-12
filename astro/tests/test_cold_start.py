@@ -259,6 +259,27 @@ def test_a_request_in_the_gap_before_the_warm_thread_starts_still_waits(cold):
     )
 
 
+def test_a_db_served_search_drops_the_memory_index(cold):
+    """Converge rather than chase every path that can build one.
+
+    The deployed worker was found with the compiled index open and a 139 MB
+    in-memory index resident alongside it. Several paths can leave that behind
+    -- a compile slower than a request would wait, a warm-up that fell back, a
+    copy inherited across a fork -- so instead of covering each, the moment a
+    search is served from the file the memory copy is released.
+    """
+    from astrology import place_index
+
+    place_index.build(places.INDEX_PATH)
+    places._index()                      # however it got here, it is resident
+    assert places._database() is not None and places._index_cache is not None
+
+    results = places.search("San Fr", 2)
+
+    assert results[0].label.startswith("San Francisco, California")
+    assert places._index_cache is None, "139 MB nothing reads from was kept"
+
+
 def test_a_forked_child_re_arms_the_warm_up(cold):
     """gunicorn --preload imports the app once and forks the workers from it.
 
