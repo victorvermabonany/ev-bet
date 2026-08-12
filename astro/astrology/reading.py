@@ -104,6 +104,26 @@ READING_SCHEMA = {
             "type": "string",
             "description": "3-5 sentences on the kind of work this chart points to and how they operate in it.",
         },
+        "archetype": {
+            "type": "object",
+            "description": "A short working identity for this chart, used as the dashboard's headline.",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Two to four words naming how this person works, e.g. 'The Patient Architect'. Never a sign name, never a job title.",
+                },
+                "line": {
+                    "type": "string",
+                    "description": "One sentence under 120 characters explaining the name, grounded in a placement.",
+                },
+            },
+            "required": ["name", "line"],
+            "additionalProperties": False,
+        },
+        "operating_style": {
+            "type": "string",
+            "description": "3-4 sentences on the mechanics of how this person works: how they decide, push, negotiate and pace. Distinct from core_read, which is about direction rather than method.",
+        },
         "strengths": {
             "type": "array",
             "minItems": 2,
@@ -158,7 +178,10 @@ READING_SCHEMA = {
             "description": "One concrete thing to do in the next 30 days.",
         },
     },
-    "required": ["headline", "core_read", "strengths", "friction", "timing", "next_step"],
+    "required": [
+        "headline", "archetype", "core_read", "operating_style",
+        "strengths", "friction", "timing", "next_step",
+    ],
     "additionalProperties": False,
 }
 
@@ -574,12 +597,99 @@ def offline_reading(
 
     return {
         "headline": headline,
+        "archetype": _offline_archetype(chart, profile),
         "core_read": core,
+        "operating_style": _offline_operating_style(chart, profile),
         "strengths": strengths,
         "friction": friction,
         "timing": timing_entries,
         "next_step": next_step,
     }
+
+
+# The archetype is the dashboard's headline, so the template path needs one too
+# rather than leaving a hole where the AI output would be. Built from the same
+# placements the AI is given: the Midheaven when a birth time makes it real,
+# and the Sun when it does not.
+
+_MODE_BY_MODALITY = {
+    "cardinal": "Starter",
+    "fixed": "Builder",
+    "mutable": "Adapter",
+}
+
+_TEMPER_BY_ELEMENT = {
+    "fire": "Driven",
+    "earth": "Patient",
+    "air": "Analytical",
+    "water": "Intuitive",
+}
+
+
+def _offline_archetype(chart: Chart, profile: CareerProfile) -> dict:
+    """A deterministic archetype from modality and element.
+
+    Two axes rather than one so the result actually varies: the element of the
+    career-defining sign gives the temper, its modality gives the mode of
+    working. Both are properties of the computed chart, not decoration.
+    """
+    from .chart import ELEMENTS, MODALITIES
+
+    time_known = chart.birth.time_known
+    anchor_sign = profile.midheaven_sign if time_known else chart.positions["Sun"].sign
+    temper = _TEMPER_BY_ELEMENT.get(ELEMENTS.get(anchor_sign, ""), "Considered")
+    mode = _MODE_BY_MODALITY.get(MODALITIES.get(anchor_sign, ""), "Operator")
+
+    if time_known:
+        line = (
+            f"Your Midheaven in {anchor_sign} is the career point itself, and it "
+            f"sets the register you are read in at work."
+        )
+    else:
+        line = (
+            f"Drawn from your {anchor_sign} Sun. A birth time would let us read "
+            f"your Midheaven, which is the more career-specific point."
+        )
+
+    return {"name": f"The {temper} {mode}", "line": line}
+
+
+def _offline_operating_style(chart: Chart, profile: CareerProfile) -> str:
+    """How this person works, as distinct from what they are aimed at."""
+    mars = chart.positions["Mars"]
+    mercury = chart.positions["Mercury"]
+    saturn = chart.positions["Saturn"]
+
+    thinking = (
+        "Mercury is retrograde natally, so you tend to reach conclusions "
+        "internally and only then say them out loud -- the lag is the process, "
+        "not a delay in it."
+        if mercury.retrograde else
+        f"Mercury in {mercury.sign} means you tend to think by articulating: "
+        f"you find the answer in the act of saying it."
+    )
+
+    pace = (
+        f"Saturn in {saturn.sign} marks where progress is earned slowly rather "
+        f"than granted, which is usually the part of the job that eventually "
+        f"becomes your credential."
+    )
+
+    push = (
+        f"When you need to ask for something -- a raise, a scope change, a "
+        f"deadline -- Mars in {mars.sign} describes the approach that actually "
+        f"lands for you."
+    )
+
+    if profile.house_time_known and profile.sixth_house_bodies:
+        daily = (
+            f" Day to day, {', '.join(profile.sixth_house_bodies)} in your 6th "
+            f"house shapes the working conditions you function best in."
+        )
+    else:
+        daily = ""
+
+    return f"{thinking} {push} {pace}{daily}"
 
 
 __all__ = [

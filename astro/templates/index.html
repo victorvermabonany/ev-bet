@@ -205,6 +205,73 @@
   </div>
 </div>
 
+<!-- ---------- dashboard ----------
+     The post-signup home. The full chart detail lives on the results view,
+     one link away, so this screen stays a summary rather than a dump. -->
+<main id="view-dashboard" class="hidden">
+  <div class="wrap dash">
+
+    <!-- 1. Archetype -->
+    <header class="screen-head dash-head">
+      <div class="eyebrow">Your working signature</div>
+      <h1 id="dash-archetype"></h1>
+      <p class="lede" id="dash-archetype-line"></p>
+      <div class="dash-meta">
+        <span class="birth-line" id="dash-birth-line"></span>
+        <button type="button" class="link-button" id="dash-view-chart">
+          View full chart
+        </button>
+      </div>
+    </header>
+
+    <!-- 4. Birth-time precision. Rendered before the reading because it
+         changes how the reading should be read. -->
+    <section class="block hidden" id="dash-precision-block">
+      <div class="precision">
+        <div class="precision-body">
+          <h3 id="precision-headline"></h3>
+          <p id="precision-body"></p>
+          <ul class="precision-list" id="precision-list"></ul>
+          <p class="precision-note" id="precision-note"></p>
+        </div>
+        <button type="button" class="btn-secondary" id="precision-cta"></button>
+      </div>
+    </section>
+
+    <!-- 2. Systems -->
+    <section class="block" id="dash-systems-block">
+      <div class="block-label">What we read</div>
+      <p class="block-intro" id="systems-intro"></p>
+      <div class="systems" id="systems"></div>
+    </section>
+
+    <!-- 3. The reading, in tabs -->
+    <section class="block" id="dash-reading-block">
+      <div class="block-label">Your reading</div>
+      <div class="tabs" role="tablist" aria-label="Your reading" id="tablist"></div>
+      <div class="tabpanels" id="tabpanels"></div>
+    </section>
+
+    <!-- 5. Timing -->
+    <section class="block" id="dash-timing-block">
+      <div class="block-label">Timing</div>
+      <div class="timing-buckets" id="timing-buckets"></div>
+      <div class="timing-upsell hidden" id="timing-upsell">
+        <p id="timing-upsell-copy"></p>
+        <button type="button" class="btn-primary" id="timing-unlock">
+          Unlock your timing
+        </button>
+      </div>
+    </section>
+
+    <section class="block" id="dash-next-block">
+      <div class="block-label">Do this next</div>
+      <div class="next-step"><p id="dash-next-step"></p></div>
+    </section>
+
+  </div>
+</main>
+
 <!-- ---------- results ---------- -->
 <main id="view-results" class="hidden">
   <div class="wrap results">

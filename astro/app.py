@@ -21,7 +21,7 @@ from flask import Flask, Response, g, jsonify, render_template, request
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from astrology import career, entitlements, places, ratelimit, reading, whop_api
+from astrology import career, dashboard, entitlements, places, ratelimit, reading, whop_api
 from astrology.chart import BirthData, build_chart
 
 logging.basicConfig(level=logging.INFO)
@@ -309,6 +309,32 @@ def api_chart():
     })
 
 
+def _reading_for(key, chart, profile, timing, tier):
+    """A reading for this chart and tier, from cache when we already have one.
+
+    Returns (result, was_cached, limit_response). Same chart, same tier -> same
+    reading, which is what stops a refresh (or a script) from billing another
+    Opus generation. The cache is checked before the rate limit is spent, so
+    repeat views never count against the caller.
+    """
+    cache_key = f"{key}:{tier}"
+    cached = _reading_cache.get(cache_key)
+    if cached is not None:
+        _reading_cache.move_to_end(cache_key)
+        return cached, True, None
+
+    limited = enforce_limit("reading")
+    if limited:
+        return None, False, limited
+
+    result = reading.generate(chart, profile, timing, tier).to_dict()
+    _reading_cache[cache_key] = result
+    _reading_cache.move_to_end(cache_key)
+    while len(_reading_cache) > READING_CACHE_LIMIT:
+        _reading_cache.popitem(last=False)
+    return result, False, None
+
+
 @app.route("/api/reading", methods=["POST"])
 def api_reading():
     """Return a reading at whatever tier this session has actually paid for.
@@ -323,27 +349,35 @@ def api_reading():
     tier = "paid" if access["entitled"] else "free"
 
     key, chart, profile, timing = _parse_birth(payload)
+    result, cached, limited = _reading_for(key, chart, profile, timing, tier)
+    if limited:
+        return limited
+    return jsonify({**result, "entitlement": access, "cached": cached})
 
-    # Same chart, same tier -> same reading. Serving it from cache is what stops
-    # a refresh (or a script) from billing another Opus generation, so the check
-    # happens before the rate limit is spent as well.
-    cache_key = f"{key}:{tier}"
-    cached = _reading_cache.get(cache_key)
-    if cached is not None:
-        _reading_cache.move_to_end(cache_key)
-        return jsonify({**cached, "entitlement": access, "cached": True})
 
-    limited = enforce_limit("reading")
+@app.route("/api/dashboard", methods=["POST"])
+def api_dashboard():
+    """Everything the post-signup dashboard renders, at this session's tier.
+
+    Shares the reading cache with /api/reading, so landing on the dashboard and
+    then opening the full chart costs one generation rather than two.
+    """
+    payload = request.get_json(silent=True) or {}
+    access = entitlements.entitlement(session_id())
+    tier = "paid" if access["entitled"] else "free"
+
+    key, chart, profile, timing = _parse_birth(payload)
+    result, cached, limited = _reading_for(key, chart, profile, timing, tier)
     if limited:
         return limited
 
-    result = reading.generate(chart, profile, timing, tier).to_dict()
-    _reading_cache[cache_key] = result
-    _reading_cache.move_to_end(cache_key)
-    while len(_reading_cache) > READING_CACHE_LIMIT:
-        _reading_cache.popitem(last=False)
-
-    return jsonify({**result, "entitlement": access, "cached": False})
+    return jsonify({
+        **dashboard.build(chart, profile, timing, result["content"], tier),
+        "birth": chart.birth.to_dict() if hasattr(chart.birth, "to_dict") else None,
+        "source": result.get("source"),
+        "entitlement": access,
+        "cached": cached,
+    })
 
 
 @app.route("/api/question", methods=["POST"])

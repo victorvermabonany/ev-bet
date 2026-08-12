@@ -17,6 +17,8 @@
     place: null,      // the picked place, incl. coordinates + timezone
     tier: "free",
     chart: null,
+    reading: null,     // fetched lazily when the full chart is opened
+    dashboard: null,
     whop: null,        // pricing config from /api/config
     plan: null,        // the currently selected plan
     entitlement: null, // what the SERVER says this session may see
@@ -118,7 +120,7 @@
   // ---------- views ----------
 
   function show(view) {
-    ["landing", "intake", "loading", "results"].forEach((name) =>
+    ["landing", "intake", "loading", "dashboard", "results"].forEach((name) =>
       $(`view-${name}`).classList.toggle("hidden", name !== view)
     );
     // `marketing` gates the nav CTA to the landing page, so app screens keep a
@@ -160,6 +162,7 @@
       timezone: state.place.timezone,
     };
     state.tier = "free";
+    state.reading = null;
 
     show("loading");
     try {
@@ -169,9 +172,11 @@
       $("loading-title").textContent = "Reading your tenth house.";
       $("loading-sub").textContent = "Finding the career placements and the transits crossing them.";
 
-      const reading = await postJSON("/api/reading", state.birth);
-      renderResults(chartResponse, reading);
-      show("results");
+      const dashboard = await postJSON("/api/dashboard", state.birth);
+      state.tier = dashboard.tier;
+      state.dashboard = dashboard;
+      renderDashboard(dashboard, chartResponse);
+      show("dashboard");
     } catch (error) {
       show("intake");
       showError(error.message || "Something went wrong. Please try again.");
@@ -188,6 +193,241 @@
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   }
+
+  // ---------- dashboard ----------
+
+  /* A drawn lock rather than an emoji: it inherits colour, scales with the
+     type, and renders identically everywhere. */
+  function lockIcon() {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "lock");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2.4");
+    svg.setAttribute("aria-hidden", "true");
+    const body = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    body.setAttribute("x", "4"); body.setAttribute("y", "10.5");
+    body.setAttribute("width", "16"); body.setAttribute("height", "10.5");
+    body.setAttribute("rx", "2");
+    const shackle = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    shackle.setAttribute("d", "M8 10.5V7a4 4 0 0 1 8 0v3.5");
+    svg.append(body, shackle);
+    return svg;
+  }
+
+  function renderDashboard(data, chartData) {
+    const chart = chartData.chart;
+
+    // 1. Archetype
+    $("dash-archetype").textContent = data.archetype.name;
+    $("dash-archetype-line").textContent = data.archetype.line;
+
+    const name = chart.birth.name ? `${chart.birth.name} · ` : "";
+    const timeLabel = chart.birth.timeKnown ? chart.birth.time : "time unknown";
+    $("dash-birth-line").textContent =
+      `${name}${chart.birth.date} · ${timeLabel} · ${chart.birth.place}`;
+
+    renderPrecision(data.precision);
+    renderSystems(data.systems, data.precision);
+    renderTabs(data.tabs);
+    renderTimingBuckets(data.timing, data.tier);
+
+    $("dash-next-step").textContent = data.nextStep || "";
+    $("dash-next-block").classList.toggle("hidden", !data.nextStep);
+  }
+
+  /* 4. Missing birth time. Framed as a layer that is switched off and can be
+     switched on, not as an error the user has made. */
+  function renderPrecision(precision) {
+    const block = $("dash-precision-block");
+    if (precision.exact) return block.classList.add("hidden");
+
+    block.classList.remove("hidden");
+    $("precision-headline").textContent = precision.headline;
+    $("precision-body").textContent = precision.body;
+    $("precision-note").textContent = precision.note;
+    $("precision-cta").textContent = precision.cta;
+
+    const list = $("precision-list");
+    list.innerHTML = "";
+    (precision.unlocks || []).forEach((item) => list.appendChild(el("li", null, item)));
+  }
+
+  /* 2. The layers of chart data this reading is actually built from. */
+  function renderSystems(systems, precision) {
+    $("systems-intro").textContent = precision.exact
+      ? "Every layer below was calculated from your birth moment. Each one feeds a different part of your reading."
+      : "Calculated from your birth date and place. One layer needs an exact time and is currently switched off.";
+
+    const container = $("systems");
+    container.innerHTML = "";
+
+    systems.forEach((system) => {
+      const card = el("div", `system${system.status === "needs_time" ? " is-off" : ""}`);
+      card.appendChild(el("div", "system-source", system.source));
+      card.appendChild(el("div", "system-name", system.name));
+      card.appendChild(el("p", "system-read", system.read));
+
+      const more = el("button", "link-button system-more",
+        system.more === "time" ? "Add your birth time" : "Read more");
+      more.type = "button";
+      more.addEventListener("click", () => {
+        if (system.more === "time") return startOver();
+        if (system.more === "timing") {
+          return $("dash-timing-block").scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        openFullChart();
+      });
+      card.appendChild(more);
+      container.appendChild(card);
+    });
+  }
+
+  /* 3. The reading, split into tabs. */
+  function renderTabs(tabs) {
+    const tablist = $("tablist");
+    const panels = $("tabpanels");
+    tablist.innerHTML = "";
+    panels.innerHTML = "";
+
+    tabs.forEach((tab, index) => {
+      const button = el("button", "tab", tab.label);
+      button.type = "button";
+      button.id = `tab-${tab.key}`;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", `panel-${tab.key}`);
+      button.setAttribute("aria-selected", String(index === 0));
+      button.tabIndex = index === 0 ? 0 : -1;
+
+      const panel = el("div", `tabpanel${index === 0 ? " is-active" : ""}`);
+      panel.id = `panel-${tab.key}`;
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", `tab-${tab.key}`);
+
+      if (tab.kind === "items") {
+        renderCards(panel, tab.content, "card");
+      } else {
+        panel.appendChild(el("p", null, tab.content));
+      }
+
+      button.addEventListener("click", () => selectTab(tab.key));
+      button.addEventListener("keydown", (event) => {
+        const keys = { ArrowRight: 1, ArrowLeft: -1 };
+        if (!(event.key in keys)) return;
+        event.preventDefault();
+        const next = (index + keys[event.key] + tabs.length) % tabs.length;
+        selectTab(tabs[next].key);
+        $(`tab-${tabs[next].key}`).focus();
+      });
+
+      tablist.appendChild(button);
+      panels.appendChild(panel);
+    });
+  }
+
+  function selectTab(key) {
+    [...$("tablist").children].forEach((button) => {
+      const active = button.id === `tab-${key}`;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    [...$("tabpanels").children].forEach((panel) =>
+      panel.classList.toggle("is-active", panel.id === `panel-${key}`)
+    );
+  }
+
+  /* 5. Timing. A locked bucket still shows its title and a real teaser --
+     never an empty box, and never an invented number. */
+  function renderTimingBuckets(buckets, tier) {
+    const container = $("timing-buckets");
+    container.innerHTML = "";
+
+    buckets.forEach((bucket) => {
+      const card = el("div", `bucket${bucket.locked ? " is-locked" : ""}`);
+
+      const head = el("div", "bucket-head");
+      head.appendChild(el("span", "bucket-label", bucket.label));
+      if (bucket.locked) {
+        head.appendChild(lockIcon());
+      } else {
+        head.appendChild(el("span", "bucket-count",
+          bucket.count === 1 ? "1 window" : `${bucket.count} windows`));
+      }
+      card.appendChild(head);
+
+      card.appendChild(el("p", "bucket-teaser", bucket.teaser));
+
+      if (!bucket.locked) {
+        const entries = el("div", "bucket-entries");
+        (bucket.entries || []).forEach((entry) => {
+          const row = el("div", "bucket-entry");
+          row.appendChild(el("div", "t", entry.title));
+          row.appendChild(el("div", "d", entry.dates));
+          row.appendChild(el("div", "m", entry.meaning));
+          entries.appendChild(row);
+        });
+        if (!(bucket.entries || []).length) {
+          entries.appendChild(el("div", "bucket-empty", "Nothing scheduled in this period."));
+        }
+        card.appendChild(entries);
+      }
+
+      container.appendChild(card);
+    });
+
+    const locked = buckets.some((b) => b.locked);
+    $("timing-upsell").classList.toggle("hidden", !locked);
+    if (locked) {
+      /* Deliberately not the sum of the three buckets: they answer different
+         questions and overlap, so adding them would overstate the number. */
+      const total = state.dashboard ? state.dashboard.totalWindows : 0;
+      const months = state.dashboard ? state.dashboard.horizonMonths : 18;
+      $("timing-upsell-copy").textContent = total
+        ? `${total} window${total === 1 ? " is" : "s are"} already calculated across the next ${months} months, with the exact days ${total === 1 ? "it lands" : "they land"}.`
+        : `Unlock the full ${months}-month calendar, your Saturn return, and every window as it opens.`;
+    }
+  }
+
+  async function openFullChart() {
+    if (!state.chart) return;
+    const button = $("dash-view-chart");
+    const original = button.textContent;
+    try {
+      if (!state.reading) {
+        button.disabled = true;
+        button.textContent = "Opening…";
+        // Served from the same cache the dashboard used, so this is free.
+        state.reading = await postJSON("/api/reading", state.birth);
+      }
+      renderResults(state.chart, state.reading);
+      show("results");
+    } catch (error) {
+      showError(error.message || "Couldn't open your full chart.");
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  /* Sending someone back to the form is how they add a birth time, since the
+     app deliberately stores nothing between visits. */
+  function startOver() {
+    state.tier = "free";
+    state.reading = null;
+    state.dashboard = null;
+    $("time-unknown").checked = false;
+    $("time").disabled = false;
+    show("intake");
+    setTimeout(() => $("time").focus(), 320);
+  }
+
+  $("dash-view-chart").addEventListener("click", openFullChart);
+  $("precision-cta").addEventListener("click", () => startOver());
+  $("timing-unlock").addEventListener("click", () => {
+    show("results");
+    setTimeout(() => $("upsell-block").scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+  });
 
   // ---------- rendering ----------
 
