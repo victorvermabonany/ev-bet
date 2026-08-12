@@ -32,7 +32,8 @@
   let searchTimer = null;
 
   function closeSuggestions() {
-    suggestionBox.classList.remove("open");
+    suggestionBox.classList.remove("open", "flip-up");
+    suggestionBox.style.maxHeight = "";
     suggestionBox.innerHTML = "";
     activeIndex = -1;
   }
@@ -42,6 +43,44 @@
     placeInput.value = place.label;
     $("place-hint").textContent = `${place.timezone} · ${place.latitude.toFixed(2)}, ${place.longitude.toFixed(2)}`;
     closeSuggestions();
+  }
+
+  /* Put the list where it can actually be reached.
+     It is absolutely positioned under the input, and on a standard laptop the
+     birth-place field sits low enough that the list opened past the bottom of
+     the window -- rendered, clickable, and completely invisible. So: scroll it
+     into view when there is room to scroll, and flip it above the input when
+     there is not. */
+  function positionSuggestions() {
+    const GAP = 6;        // matches the CSS offset
+    const MARGIN = 12;    // breathing room against the window edge
+    const MIN_HEIGHT = 140;
+
+    suggestionBox.classList.remove("flip-up");
+    suggestionBox.style.maxHeight = "";
+
+    const field = placeInput.getBoundingClientRect();
+    const wanted = Math.min(suggestionBox.scrollHeight, 258);
+    const spaceBelow = window.innerHeight - field.bottom - GAP - MARGIN;
+    const spaceAbove = field.top - GAP - MARGIN;
+    const scrollable = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight - window.scrollY
+    );
+
+    if (spaceBelow + scrollable >= Math.min(wanted, MIN_HEIGHT)) {
+      const height = Math.min(wanted, spaceBelow + scrollable);
+      suggestionBox.style.maxHeight = `${height}px`;
+      const overflow = height - spaceBelow;
+      if (overflow > 0) {
+        window.scrollBy({ top: Math.min(overflow, scrollable), behavior: "smooth" });
+      }
+    } else if (spaceAbove >= MIN_HEIGHT) {
+      suggestionBox.classList.add("flip-up");
+      suggestionBox.style.maxHeight = `${Math.min(wanted, spaceAbove)}px`;
+    } else {
+      suggestionBox.style.maxHeight = `${Math.max(MIN_HEIGHT, spaceBelow)}px`;
+    }
   }
 
   function renderSuggestions(results) {
@@ -63,6 +102,7 @@
       suggestionBox.appendChild(row);
     });
     suggestionBox.classList.add("open");
+    positionSuggestions();
   }
 
   function highlight() {
@@ -110,6 +150,10 @@
   });
 
   placeInput.addEventListener("blur", () => setTimeout(closeSuggestions, 140));
+
+  window.addEventListener("resize", () => {
+    if (suggestionBox.classList.contains("open")) positionSuggestions();
+  });
 
   // ---------- birth time toggle ----------
 

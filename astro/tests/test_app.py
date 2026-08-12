@@ -493,3 +493,51 @@ def test_repeated_requests_are_cached(client):
     assert len(_chart_cache) == 1
     client.post("/api/chart", json=PAYLOAD)
     assert len(_chart_cache) == 1
+
+
+# ---------------------------------------------------------------------------
+# Birth-place picker
+# ---------------------------------------------------------------------------
+
+
+def test_place_search_backs_the_picker(client):
+    """The picker is offline: no third-party API, no key, no CORS surface."""
+    for query, expected in [
+        ("Dublin", "Dublin, Ireland"),
+        ("new york", "New York City"),
+        ("Sao Paulo", "São Paulo"),       # accents optional
+        ("München", "Munich"),            # local spelling resolves
+        ("NYC", "New York City"),          # common alias
+    ]:
+        response = client.get(f"/api/places?q={query}")
+        assert response.status_code == 200
+        results = response.get_json()["results"]
+        assert results, f"no results for {query!r}"
+        assert expected in results[0]["label"], f"{query!r} -> {results[0]['label']}"
+
+        # Every result must carry what the chart engine needs.
+        for place in results:
+            assert place["timezone"]
+            assert -90 <= place["latitude"] <= 90
+            assert -180 <= place["longitude"] <= 180
+
+
+def test_place_dropdown_can_open_upward():
+    """Guards the fix for the picker opening below the fold.
+
+    The list is absolutely positioned under the input, which sits low in the
+    form; on a 1280x800 laptop it opened past the bottom of the window where it
+    could not be clicked. positionSuggestions() measures the space and flips the
+    list above the field when there isn't room. Full end-to-end coverage lives
+    in scripts/verify_place_picker.js, which needs a browser; this asserts the
+    two halves of the mechanism are still wired together.
+    """
+    here = os.path.dirname(__file__)
+    script = open(os.path.join(here, "..", "static", "app.js")).read()
+    styles = open(os.path.join(here, "..", "static", "styles.css")).read()
+
+    assert "function positionSuggestions" in script
+    assert "positionSuggestions();" in script, "never called after opening"
+    assert "flip-up" in script, "no upward fallback"
+    assert ".suggestions.flip-up" in styles, "flip-up has no styling"
+    assert "bottom: calc(100% + 6px)" in styles

@@ -1544,3 +1544,11 @@ section.block { margin-bottom: 56px; }
   .precision, .timing-upsell { padding: 20px; }
   .tabs { flex-wrap: nowrap; overflow-x: auto; }
 }
+
+/* Opens upward when there is no room below — see positionSuggestions(). The
+   birth-place field sits low in the form, and on a standard laptop the list
+   otherwise rendered past the bottom of the window where nobody could reach it. */
+.suggestions.flip-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
