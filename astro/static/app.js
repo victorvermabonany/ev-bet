@@ -31,6 +31,12 @@
   let activeIndex = -1;
   let searchTimer = null;
 
+  function setPlaceHint(message, isProblem) {
+    const hint = $("place-hint");
+    hint.textContent = message;
+    hint.classList.toggle("is-problem", Boolean(isProblem));
+  }
+
   function closeSuggestions() {
     suggestionBox.classList.remove("open", "flip-up");
     suggestionBox.style.maxHeight = "";
@@ -41,7 +47,7 @@
   function choosePlace(place) {
     state.place = place;
     placeInput.value = place.label;
-    $("place-hint").textContent = `${place.timezone} · ${place.latitude.toFixed(2)}, ${place.longitude.toFixed(2)}`;
+    setPlaceHint(`${place.timezone} · ${place.latitude.toFixed(2)}, ${place.longitude.toFixed(2)}`, false);
     closeSuggestions();
   }
 
@@ -113,7 +119,7 @@
 
   placeInput.addEventListener("input", () => {
     state.place = null;
-    $("place-hint").textContent = "";
+    setPlaceHint("", false);
     clearTimeout(searchTimer);
     const query = placeInput.value.trim();
     if (query.length < 2) return closeSuggestions();
@@ -121,9 +127,26 @@
     searchTimer = setTimeout(async () => {
       try {
         const response = await fetch(`/api/places?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error(`city lookup returned ${response.status}`);
         const data = await response.json();
-        renderSuggestions(data.results || []);
-      } catch {
+        const results = data.results || [];
+        if (!results.length) {
+          /* A real query with no match is information, not silence. */
+          setPlaceHint(
+            `No city matching "${query}". Try the nearest large town, or a different spelling.`,
+            true
+          );
+          return closeSuggestions();
+        }
+        renderSuggestions(results);
+      } catch (error) {
+        /* Swallowing this was the whole bug: the field looked like a plain
+           text input with no dropdown and no reason given. */
+        console.error("city lookup failed:", error);
+        setPlaceHint(
+          "Can't reach the city list right now — type your city and we'll look it up when you continue.",
+          true
+        );
         closeSuggestions();
       }
     }, 180);
@@ -188,7 +211,11 @@
 
     const date = $("date").value;
     if (!date) return showError("Please enter your birth date.");
-    if (!state.place) return showError("Please pick your birth place from the list.");
+
+    const typedPlace = $("place").value.trim();
+    if (!state.place && !typedPlace) {
+      return showError("Please enter your birth place.");
+    }
 
     const timeUnknown = $("time-unknown").checked;
     if (!timeUnknown && !$("time").value) {
@@ -200,10 +227,13 @@
       date,
       time: timeUnknown ? "12:00" : $("time").value,
       timeKnown: !timeUnknown,
-      place: state.place.label,
-      latitude: state.place.latitude,
-      longitude: state.place.longitude,
-      timezone: state.place.timezone,
+      /* If nothing was picked from the list, send the typed name alone and let
+         the server resolve it. It has the same city index the dropdown uses, so
+         a working picker is a convenience rather than a requirement. */
+      place: state.place ? state.place.label : typedPlace,
+      latitude: state.place ? state.place.latitude : null,
+      longitude: state.place ? state.place.longitude : null,
+      timezone: state.place ? state.place.timezone : "",
     };
     state.tier = "free";
     state.reading = null;

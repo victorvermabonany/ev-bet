@@ -118,7 +118,9 @@ def search(query: str, limit: int = 8) -> list[Place]:
     city = _normalize(parts[0])
     qualifiers = [_normalize(p) for p in parts[1:]]
 
-    candidates = set(by_name.get(city, []))
+    # Exact hits on any indexed name, primary or alternate.
+    exact_ids = set(by_name.get(city, []))
+    candidates = set(exact_ids)
     if not candidates:
         # Prefix fall-back for partial typing ("San Franc").
         for name, indexes in by_name.items():
@@ -138,9 +140,32 @@ def search(query: str, limit: int = 8) -> list[Place]:
         if narrowed:
             results = narrowed
 
-    def rank(place: Place) -> tuple[int, int]:
-        exact = 0 if _normalize(place.name) == city else 1
-        return (exact, -place.population)
+    def rank(place: Place) -> tuple[int, int, int]:
+        """Match quality first, size second.
+
+        Ranking prefix matches on population alone let a large city whose
+        *alternate* name matched outrank the city the user was actually typing:
+        "San Fr" returned Quito, because Quito's alternate name is "San
+        Francisco de Quito" and it is the bigger city. A place whose own name
+        matches must always come first.
+        """
+        name = _normalize(place.name)
+        if name == city:
+            tier = 0                       # its real name is exactly this
+        elif name.startswith(city):
+            tier = 1                       # its real name starts with this
+        elif id(place) in _exact_alias_ids:
+            tier = 2                       # an alternate name is exactly this
+        else:
+            tier = 3                       # only an alternate name starts with it
+        # Closeness only means something for a prefix match, where a shorter
+        # name is nearer to what was typed. For an exact hit the name's length
+        # is irrelevant -- "NYC" matches both Manhattan and New York City
+        # exactly, and the bigger one is the one meant.
+        closeness = len(name) - len(city) if tier in (1, 3) else 0
+        return (tier, closeness, -place.population)
+
+    _exact_alias_ids = {id(places[i]) for i in exact_ids}
 
     results.sort(key=rank)
     return results[:limit]

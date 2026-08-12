@@ -1639,3 +1639,11 @@ section.block { margin-bottom: 56px; }
   .sky-now-row { grid-template-columns: 1fr; gap: 18px; }
   .sky-now-line { margin-top: 18px; font-size: 13.5px; }
 }
+
+/* The place field speaks here: timezone and coordinates on success, and the
+   reason on failure. Silence was the bug — a lookup that quietly died left the
+   input looking like an ordinary text box. */
+.hint.is-problem,
+#place-hint.is-problem {
+  color: var(--terracotta-deep);
+}

@@ -167,7 +167,10 @@ def _parse_birth(payload: dict):
         # resolving the typed string so the API is usable on its own.
         matches = places.search(place_label, 1)
         if not matches:
-            raise BadRequest("could not resolve birth place -- pick one from the list")
+            raise BadRequest(
+                f"We couldn't find a city matching \"{place_label}\". "
+                f"Try the nearest large town, or check the spelling."
+            )
         chosen = matches[0]
         latitude, longitude = chosen.latitude, chosen.longitude
         timezone_name = timezone_name or chosen.timezone

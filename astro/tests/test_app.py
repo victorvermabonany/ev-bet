@@ -433,7 +433,10 @@ def test_reading_tier_is_decided_by_the_server(client):
         ({**PAYLOAD, "time": "25:99"}, "HH:MM"),
         ({**PAYLOAD, "latitude": 999}, "out of range"),
         ({**PAYLOAD, "latitude": "abc"}, "must be numbers"),
-        ({**PAYLOAD, "latitude": None, "longitude": None, "place": "Zzzqqq"}, "birth place"),
+        # No coordinates and an unresolvable name: the server still answers 400,
+        # but the message now names the city the user typed instead of telling
+        # them to "pick from the list" when no list may have appeared.
+        ({**PAYLOAD, "latitude": None, "longitude": None, "place": "Zzzqqq"}, "couldn't find a city"),
     ],
 )
 def test_invalid_input_is_rejected_with_400(client, payload, fragment):
@@ -541,3 +544,61 @@ def test_place_dropdown_can_open_upward():
     assert "flip-up" in script, "no upward fallback"
     assert ".suggestions.flip-up" in styles, "flip-up has no styling"
     assert "bottom: calc(100% + 6px)" in styles
+
+
+def test_typed_place_resolves_without_coordinates(client):
+    """The picker must be a convenience, not a requirement.
+
+    If the dropdown fails for any reason -- offline, blocked, a stale build --
+    the user can still type a city and get a chart, because the server holds the
+    same index the dropdown reads from.
+    """
+    payload = {
+        "name": "Typed",
+        "date": "1993-08-04",
+        "time": "07:15",
+        "timeKnown": True,
+        "place": "Lisbon",       # no latitude, longitude or timezone
+    }
+    response = client.post("/api/chart", json=payload)
+    assert response.status_code == 200
+
+    chart = response.get_json()["chart"]
+    assert "Lisbon" in chart["birth"]["place"]
+    assert chart["birth"]["timezone"] == "Europe/Lisbon"
+
+
+def test_typed_place_produces_the_same_chart_as_a_picked_one(client):
+    """Typing and picking must not silently give different answers."""
+    base = {"name": "Same", "date": "1993-08-04", "time": "07:15", "timeKnown": True}
+    picked = places.search("Lisbon", 1)[0]
+
+    typed = client.post("/api/chart", json={**base, "place": "Lisbon"}).get_json()
+    chosen = client.post("/api/chart", json={
+        **base, "place": picked.label, "latitude": picked.latitude,
+        "longitude": picked.longitude, "timezone": picked.timezone,
+    }).get_json()
+
+    assert typed["chart"]["angles"] == chosen["chart"]["angles"]
+    assert typed["chart"]["positions"] == chosen["chart"]["positions"]
+
+
+def test_partial_typing_ranks_the_obvious_city_first():
+    """Prefix search must not be ranked on population alone.
+
+    Quito's alternate name is "San Francisco de Quito" and Quito is the bigger
+    city, so ranking prefix matches by size alone made "San Fr" return Quito.
+    A place whose own name matches has to win.
+    """
+    assert places.search("San Fr", 3)[0].name == "San Francisco"
+    assert places.search("San Fran", 3)[0].name == "San Francisco"
+    assert places.search("New Yor", 3)[0].name.startswith("New York")
+    assert places.search("Los Ang", 3)[0].admin == "California"
+    assert places.search("Sao Pau", 3)[0].country == "Brazil"
+    assert places.search("Cambridg", 3)[0].country == "United Kingdom"
+
+
+def test_exact_name_still_beats_a_bigger_alias_match():
+    results = places.search("San Francisco", 5)
+    assert results[0].name == "San Francisco"
+    assert results[0].admin == "California"
