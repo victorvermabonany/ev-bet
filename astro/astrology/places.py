@@ -210,27 +210,61 @@ def warm() -> None:
     only consulted for raw coordinates with no timezone attached, which the
     picker never produces because every result carries its own.
     """
-    global _warm_stage
-
-    if _database() is not None:
-        _warm_stage = "ready"
-        return
+    global _warm_stage, _index_cache
 
     try:
-        _warm_stage = "compiling city index"
-        from .place_index import build
-
-        build(_writable_index_path())
         if _database() is not None:
             _warm_stage = "ready"
             return
-        log.warning("compiled index was not usable; falling back to memory")
-    except Exception:  # noqa: BLE001 - never take the worker down for this
-        log.exception("could not compile the city index; falling back to memory")
 
-    _warm_stage = "building city index in memory"
-    _index()
-    _warm_stage = "ready"
+        try:
+            _warm_stage = "compiling city index"
+            from .place_index import build
+
+            build(_writable_index_path())
+            if _database() is not None:
+                # Release the in-memory index if a request built one before the
+                # compile finished. It is 139 MB that nothing reads from now.
+                _index_cache = None
+                _warm_stage = "ready"
+                return
+            log.warning("compiled index was not usable; falling back to memory")
+        except Exception:  # noqa: BLE001 - never take the worker down for this
+            log.exception("could not compile the city index; falling back to memory")
+
+        _warm_stage = "building city index in memory"
+        _index()
+        _warm_stage = "ready"
+    finally:
+        _warm_finished.set()
+
+
+# How long a request will wait for an in-flight compile before giving up and
+# building its own index in memory. Generous, because the alternative is worse:
+# gunicorn's own timeout is 120s, and a compile that takes longer than this on a
+# throttled instance is one we would rather wait out than duplicate.
+COMPILE_WAIT_SECONDS = 75
+
+_warm_finished = threading.Event()
+
+
+def _wait_for_compile() -> sqlite3.Connection | None:
+    """Wait for an in-flight compile rather than racing it.
+
+    A request arriving during the compile used to go straight to the in-memory
+    build. Measured on a cold worker, a request landing 300 ms in pushed the
+    peak to 218 MB -- the compile's 110 MB plus its own 139 MB -- and the
+    process then held that second copy for its whole life even though the
+    compiled file answered every subsequent query. On a 512 MB instance that is
+    the headroom the worker was OOM-killed for.
+
+    Waiting costs this one request the rest of the compile. Racing cost the
+    worker.
+    """
+    if _warm_stage != "compiling city index":
+        return None
+    _warm_finished.wait(COMPILE_WAIT_SECONDS)
+    return _database()
 
 
 def _writable_index_path() -> str:
@@ -320,7 +354,7 @@ def search(query: str, limit: int = 8) -> list[Place]:
     city = _normalize(parts[0])
     qualifiers = [_normalize(p) for p in parts[1:]]
 
-    conn = _database()
+    conn = _database() or _wait_for_compile()
     if conn is not None:
         return _rank(_search_db(conn, city, limit), city, qualifiers, limit)
 

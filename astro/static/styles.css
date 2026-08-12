@@ -549,7 +549,26 @@ textarea { resize: vertical; min-height: 92px; }
 
 .suggestion:last-child { border-bottom: none; }
 .suggestion:hover, .suggestion.active { background: var(--terracotta-wash); }
-.suggestion .tz { font-size: 11.5px; color: var(--ink-faint); }
+.suggestion .tz {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 460px) {
+  /* On a phone the label and the timezone cannot share a row. "San Francisco,
+     California, United States" next to "America/Los_Angeles" wrapped the city
+     name onto three lines and pushed each result to ~90px tall, so two results
+     filled the dropdown and the rest sat under the fold. Stacked, a result is
+     one line of name over one line of zone. */
+  .suggestion {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 9px 15px;
+  }
+}
 
 /* ---------- buttons ---------- */
 
@@ -1683,8 +1702,14 @@ body.app-sky .night { display: block; }
 /* Everything real sits above the sky.
    Deliberately NOT .nav: it already carries z-index 60, and restating it here
    at equal specificity silently demoted it below the landing page's own
-   starfield canvas, which then swallowed every click on the nav CTA. */
-main, footer { position: relative; z-index: 1; }
+   starfield canvas, which then swallowed every click on the nav CTA.
+
+   main outranks footer rather than tying with it. z-index on main opens a
+   stacking context, so the city dropdown inside it cannot climb out however
+   high its own z-index goes; at a tie the later-in-DOM footer painted over it
+   and, on a phone, took the taps for the third and fourth results. */
+main { position: relative; z-index: 2; }
+footer { position: relative; z-index: 1; }
 
 /* A whisper of deep navy at the top of the app screens, so the cream reads as
    dawn rather than as blank paper. Stops well short of any text. */

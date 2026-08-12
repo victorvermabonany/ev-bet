@@ -38,15 +38,19 @@ def cold(tmp_path):
     connection, and every test in this file silently stopped exercising the
     fallback it exists to cover.
     """
-    saved = (places._index_cache, places._tf_cache, places._db, places.INDEX_PATH)
+    saved = (places._index_cache, places._tf_cache, places._db,
+             places.INDEX_PATH, places._warm_stage)
     places._index_cache = None
     places._tf_cache = None
     places._db = None
+    places._warm_stage = "cold"
+    places._warm_finished.clear()
     places.INDEX_PATH = str(tmp_path / "absent" / "places.sqlite")
     assert not os.path.exists(places.INDEX_PATH)
     yield
-    (places._index_cache, places._tf_cache,
-     places._db, places.INDEX_PATH) = saved
+    (places._index_cache, places._tf_cache, places._db,
+     places.INDEX_PATH, places._warm_stage) = saved
+    places._warm_finished.set()
 
 
 @pytest.fixture
@@ -169,6 +173,45 @@ def test_both_lookup_paths_agree(prebuilt, monkeypatch, tmp_path):
 
     for query in queries:
         assert from_db[query] == from_memory[query], query
+
+
+def test_a_request_during_the_compile_waits_instead_of_racing_it(cold):
+    """Two indexes at once is what exhausted the instance.
+
+    A request landing 300 ms into the compile used to build its own in-memory
+    copy alongside it -- 110 MB plus 139 MB, a 218 MB peak on a 512 MB box --
+    and then hold that copy for the life of the worker even though the compiled
+    file answered every query after it.
+    """
+    warming = threading.Thread(target=places.warm, daemon=True)
+    warming.start()
+    # Wait until the compile is genuinely under way, then search.
+    for _ in range(500):
+        if places.warm_stage() == "compiling city index":
+            break
+        time.sleep(0.002)
+    assert places.warm_stage() == "compiling city index"
+
+    results = places.search("San Fr", 3)
+    warming.join(timeout=60)
+
+    assert results[0].label.startswith("San Francisco, California")
+    assert places._index_cache is None, (
+        "the request built its own in-memory index alongside the compile"
+    )
+    assert places._database() is not None, "should be answering from the compiled file"
+
+
+def test_the_compile_releases_an_index_a_request_already_built(cold, monkeypatch):
+    """If a request did get in first, the memory copy is dropped once the
+    compiled file is ready -- otherwise it is 139 MB nothing reads from."""
+    places._index()                       # a request got there before the compile
+    assert places._index_cache is not None
+
+    places.warm()
+
+    assert places._database() is not None
+    assert places._index_cache is None, "stale in-memory index was not released"
 
 
 def test_the_index_is_never_visible_half_built(cold):
