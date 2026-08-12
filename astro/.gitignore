@@ -1,3 +1,6 @@
 # Entitlement store -- local runtime state, never committed
 *.db
 *.db-journal
+
+# Precomputed at build time by scripts/build_place_index.py
+data/

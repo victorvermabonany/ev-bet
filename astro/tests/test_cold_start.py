@@ -23,13 +23,32 @@ from astrology import places  # noqa: E402
 
 
 @pytest.fixture
-def cold():
-    """Reset the module to its just-imported state."""
-    saved_index, saved_tf = places._index_cache, places._tf_cache
+def cold(monkeypatch):
+    """A worker with nothing built AND no precomputed file.
+
+    This is the in-memory fallback path -- what every deployment used to do on
+    every cold start, and what a fresh checkout still does before
+    scripts/build_place_index.py has run.
+    """
+    saved_index, saved_tf, saved_db = (
+        places._index_cache, places._tf_cache, places._db
+    )
     places._index_cache = None
     places._tf_cache = None
+    places._db = None
+    monkeypatch.setattr(places, "INDEX_PATH", "/nonexistent/places.sqlite")
     yield
-    places._index_cache, places._tf_cache = saved_index, saved_tf
+    places._index_cache, places._tf_cache, places._db = (
+        saved_index, saved_tf, saved_db
+    )
+
+
+@pytest.fixture
+def prebuilt():
+    """A worker with the precomputed index available -- the deployed path."""
+    if not os.path.exists(places.INDEX_PATH):
+        pytest.skip("run scripts/build_place_index.py first")
+    yield
 
 
 def test_concurrent_cold_requests_build_the_index_once(cold, monkeypatch):
@@ -57,6 +76,17 @@ def test_concurrent_cold_requests_build_the_index_once(cold, monkeypatch):
     assert all(r for r in results), "every concurrent caller still got results"
 
 
+def test_warm_does_not_load_the_timezone_dataset(prebuilt):
+    """It costs ~41 MB and only raw coordinates need it.
+
+    Every result the picker returns already carries its own timezone, so paying
+    for this at boot is 41 MB spent for nothing on a 512 MB instance.
+    """
+    places._tf_cache = None
+    places.warm()
+    assert places._tf_cache is None
+
+
 def test_timezone_finder_is_built_once(cold, monkeypatch):
     builds = []
     from timezonefinder import TimezoneFinder
@@ -73,13 +103,41 @@ def test_timezone_finder_is_built_once(cold, monkeypatch):
     assert len(builds) == 1
 
 
-def test_warm_prepares_both_datasets(cold):
+def test_warm_builds_the_index_when_there_is_no_precomputed_file(cold):
     assert places._index_cache is None
     places.warm()
     assert places._index_cache is not None
-    assert places._tf_cache is not None
-    # And it is genuinely usable afterwards.
+    assert places.warm_stage() == "ready"
     assert places.search("Lisbon", 1)[0].country == "Portugal"
+
+
+def test_warm_is_instant_when_the_index_was_precomputed(prebuilt):
+    """The deployed path: opening a file, not assembling 190k dict keys."""
+    started = time.time()
+    places.warm()
+    assert places.is_warm()
+    assert places.warm_stage() == "ready"
+    assert time.time() - started < 1.0, "warm-up should be a file open"
+    # And nothing was built in memory to achieve it.
+    assert places._index_cache is None
+
+
+def test_both_lookup_paths_agree(prebuilt, monkeypatch):
+    """The fallback must not quietly return different cities to the real path."""
+    queries = ["New York", "NYC", "San Fr", "Bombay", "Dubl", "Austin, TX", "Lisb"]
+    from_db = {q: [p.label for p in places.search(q, 5)] for q in queries}
+
+    saved_db, saved_index = places._db, places._index_cache
+    try:
+        places._db = None
+        places._index_cache = None
+        monkeypatch.setattr(places, "INDEX_PATH", "/nonexistent/places.sqlite")
+        from_memory = {q: [p.label for p in places.search(q, 5)] for q in queries}
+    finally:
+        places._db, places._index_cache = saved_db, saved_index
+
+    for query in queries:
+        assert from_db[query] == from_memory[query], query
 
 
 def test_a_second_search_does_not_rebuild(cold, monkeypatch):

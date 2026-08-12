@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import datetime as dt
 import functools
+import os
+import sqlite3
 import threading
 import unicodedata
 from dataclasses import dataclass, asdict
@@ -90,12 +92,71 @@ def _index() -> tuple[list[Place], dict[str, list[int]]]:
     return _index_cache
 
 
+# Where the precomputed index lives. Built by scripts/build_place_index.py at
+# deploy time; absent in a fresh checkout, in which case the in-memory build
+# below takes over so local development and the tests need no build step.
+INDEX_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "places.sqlite"
+)
+
+_db_lock = threading.Lock()
+_db: sqlite3.Connection | None = None
+
 _warm_stage = "cold"
 
 
+def _database() -> sqlite3.Connection | None:
+    """The precomputed index, or None if this deployment has no built file."""
+    global _db
+    if _db is None:
+        if not os.path.exists(INDEX_PATH):
+            return None
+        with _db_lock:
+            if _db is None:
+                _db = sqlite3.connect(INDEX_PATH, check_same_thread=False)
+                _db.row_factory = sqlite3.Row
+    return _db
+
+
+def _place_from_row(row) -> Place:
+    return Place(
+        name=row["name"], country=row["country"], admin=row["admin"],
+        latitude=row["latitude"], longitude=row["longitude"],
+        timezone=row["timezone"], population=row["population"],
+    )
+
+
+def _search_db(conn: sqlite3.Connection, city: str, limit: int) -> list[tuple[Place, bool]]:
+    """Candidates for ``city``, each flagged as an exact-name hit.
+
+    Exact matches first, and only if there are none does it range-scan the
+    prefix -- `key >= q AND key < q + '\uffff'` rather than LIKE, so the index
+    is always used.
+    """
+    # GROUP BY p.id is load-bearing: a city can carry several names matching the
+    # same prefix ("san francisco", "san francisco de asis"), and the join
+    # yields one row per name. Without it "San Fr" returned San Francisco five
+    # times. The in-memory path deduped via a set of ids.
+    rows = conn.execute(
+        "SELECT p.* FROM names n JOIN places p ON p.id = n.place_id "
+        "WHERE n.key = ? GROUP BY p.id ORDER BY p.population DESC LIMIT ?",
+        (city, limit * 4),
+    ).fetchall()
+    if rows:
+        return [(_place_from_row(r), True) for r in rows]
+
+    rows = conn.execute(
+        "SELECT p.* FROM names n JOIN places p ON p.id = n.place_id "
+        "WHERE n.key >= ? AND n.key < ? GROUP BY p.id "
+        "ORDER BY p.population DESC LIMIT ?",
+        (city, city + "\uffff", 400),
+    ).fetchall()
+    return [(_place_from_row(r), False) for r in rows]
+
+
 def is_warm() -> bool:
-    """True once both datasets are built and a request will not have to wait."""
-    return _index_cache is not None and _tf_cache is not None
+    """True once a search will not have to wait for anything to be built."""
+    return _database() is not None or _index_cache is not None
 
 
 def warm_stage() -> str:
@@ -109,15 +170,22 @@ def warm_stage() -> str:
 
 
 def warm() -> None:
-    """Build both datasets ahead of the first request.
+    """Make the first request cheap.
 
-    Called at import so it happens under gunicorn too, not just `python app.py`.
+    With the precomputed file this is just opening SQLite -- instant, and a
+    megabyte. Without it we fall back to assembling the index in memory, which
+    is what this used to do on every deployment.
+
+    The timezone dataset is deliberately *not* warmed: it costs ~41 MB and is
+    only consulted for raw coordinates with no timezone attached, which the
+    picker never produces because every result carries its own.
     """
     global _warm_stage
-    _warm_stage = "building city index"
+    if _database() is not None:
+        _warm_stage = "ready"
+        return
+    _warm_stage = "building city index in memory (no precomputed file)"
     _index()
-    _warm_stage = "building timezone data"
-    _timezone_finder()
     _warm_stage = "ready"
 
 
@@ -183,12 +251,16 @@ def search(query: str, limit: int = 8) -> list[Place]:
     if len(query) < 2:
         return []
 
-    places, by_name = _index()
     parts = [p.strip() for p in query.split(",") if p.strip()]
     city = _normalize(parts[0])
     qualifiers = [_normalize(p) for p in parts[1:]]
 
-    # Exact hits on any indexed name, primary or alternate.
+    conn = _database()
+    if conn is not None:
+        return _rank(_search_db(conn, city, limit), city, qualifiers, limit)
+
+    # No precomputed file (fresh checkout, tests): build the index in memory.
+    places, by_name = _index()
     exact_ids = set(by_name.get(city, []))
     candidates = set(exact_ids)
     if not candidates:
@@ -200,45 +272,52 @@ def search(query: str, limit: int = 8) -> list[Place]:
                     break
 
     results = [places[i] for i in candidates]
+    exact_names = {id(places[i]) for i in exact_ids}
+    return _rank(
+        [(p, id(p) in exact_names) for p in results], city, qualifiers, limit
+    )
 
+
+def _rank(
+    candidates: list[tuple[Place, bool]],
+    city: str,
+    qualifiers: list[str],
+    limit: int,
+) -> list[Place]:
+    """Order candidates by how well they match, then by size.
+
+    Ranking on population alone let a large city whose *alternate* name matched
+    outrank the one being typed: "San Fr" returned Quito, whose alternate name
+    is "San Francisco de Quito". A place whose own name matches must win.
+    """
     if qualifiers:
-        def matches(place: Place) -> bool:
+        def fits(place: Place) -> bool:
             haystack = _normalize(f"{place.admin} {place.country}")
             return all(q in haystack for q in qualifiers)
 
-        narrowed = [p for p in results if matches(p)]
+        narrowed = [c for c in candidates if fits(c[0])]
         if narrowed:
-            results = narrowed
+            candidates = narrowed
 
-    def rank(place: Place) -> tuple[int, int, int]:
-        """Match quality first, size second.
-
-        Ranking prefix matches on population alone let a large city whose
-        *alternate* name matched outrank the city the user was actually typing:
-        "San Fr" returned Quito, because Quito's alternate name is "San
-        Francisco de Quito" and it is the bigger city. A place whose own name
-        matches must always come first.
-        """
+    def key(entry: tuple[Place, bool]) -> tuple[int, int, int]:
+        place, exact_hit = entry
         name = _normalize(place.name)
         if name == city:
             tier = 0                       # its real name is exactly this
         elif name.startswith(city):
             tier = 1                       # its real name starts with this
-        elif id(place) in _exact_alias_ids:
+        elif exact_hit:
             tier = 2                       # an alternate name is exactly this
         else:
             tier = 3                       # only an alternate name starts with it
-        # Closeness only means something for a prefix match, where a shorter
-        # name is nearer to what was typed. For an exact hit the name's length
-        # is irrelevant -- "NYC" matches both Manhattan and New York City
-        # exactly, and the bigger one is the one meant.
+        # Closeness only means something for a prefix match. For an exact hit
+        # the name's length is irrelevant -- "NYC" matches both Manhattan and
+        # New York City exactly, and the bigger one is the one meant.
         closeness = len(name) - len(city) if tier in (1, 3) else 0
         return (tier, closeness, -place.population)
 
-    _exact_alias_ids = {id(places[i]) for i in exact_ids}
-
-    results.sort(key=rank)
-    return results[:limit]
+    candidates.sort(key=key)
+    return [place for place, _ in candidates[:limit]]
 
 
 def timezone_for(latitude: float, longitude: float, fallback: str = "") -> str:
