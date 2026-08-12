@@ -194,6 +194,8 @@
     // single primary action of their own.
     $("nav").classList.toggle("marketing", view === "landing");
     $("nav").classList.toggle("on-sky", view === "landing");
+    document.body.classList.toggle("app-sky", view !== "landing");
+    if (view !== "landing") drawNight();
     requestAnimationFrame(syncNav);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -267,6 +269,92 @@
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   }
+
+  /* One six-line block is a wall; the same sentences in pairs are a read.
+     Splits on sentence ends, keeping abbreviations and decimals intact, then
+     groups them so no paragraph runs longer than about three lines. */
+  function paragraphs(text, perParagraph = 2) {
+    const sentences = String(text || "")
+      .split(/(?<=[.!?])\s+(?=[A-Z"'\u201c])/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const groups = [];
+    for (let i = 0; i < sentences.length; i += perParagraph) {
+      groups.push(sentences.slice(i, i + perParagraph).join(" "));
+    }
+    return groups.length ? groups : [String(text || "")];
+  }
+
+  function renderProse(container, text) {
+    container.innerHTML = "";
+    paragraphs(text).forEach((chunk) => container.appendChild(el("p", null, chunk)));
+    return container;
+  }
+
+  // ---------- night sky ----------
+
+  /* The app screens' celestial ground. Navy at 4-12% alpha, behind everything,
+     so it reads as atmosphere without touching the contrast of a single word.
+     Generated rather than shipped: no asset, and it re-renders to any size. */
+  function drawNight() {
+    const canvas = $("night");
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    /* Deterministic from the viewport size, so a resize does not reshuffle the
+       sky under the reader. */
+    let seed = Math.round(width * 7 + height * 13);
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+
+    const count = Math.round((width * height) / 9000);
+    for (let i = 0; i < count; i += 1) {
+      const x = random() * width;
+      const y = random() * height;
+      const radius = 0.45 + random() * 1.15;
+      // Denser toward the top, where the navy wash already sits.
+      const falloff = 1 - (y / height) * 0.55;
+      context.beginPath();
+      context.fillStyle = `rgba(31, 42, 68, ${(0.09 + random() * 0.13) * falloff})`;
+      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    // A handful of four-point sparkles, gold, barely there.
+    for (let i = 0; i < 11; i += 1) {
+      const x = random() * width;
+      const y = random() * height * 0.7;
+      const arm = 3 + random() * 4;
+      context.save();
+      context.translate(x, y);
+      context.strokeStyle = `rgba(201, 162, 75, ${0.22 + random() * 0.16})`;
+      context.lineWidth = 1.0;
+      context.beginPath();
+      context.moveTo(-arm, 0); context.lineTo(arm, 0);
+      context.moveTo(0, -arm); context.lineTo(0, arm);
+      context.stroke();
+      context.restore();
+    }
+  }
+
+  let nightTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(nightTimer);
+    nightTimer = setTimeout(drawNight, 180);
+  });
 
   // ---------- dashboard ----------
 
@@ -382,7 +470,7 @@
       if (tab.kind === "items") {
         renderCards(panel, tab.content, "card");
       } else {
-        panel.appendChild(el("p", null, tab.content));
+        panel.appendChild(renderProse(el("div", "prose"), tab.content));
       }
 
       button.addEventListener("click", () => selectTab(tab.key));
@@ -505,14 +593,31 @@
 
   // ---------- rendering ----------
 
+  function setFoldMeta(id, text) {
+    const node = $(id);
+    if (node) node.textContent = text;
+  }
+
+  function countLabel(n, one, many) {
+    return `${n} ${n === 1 ? one : many}`;
+  }
+
   function renderResults(chartData, readingData) {
     const content = readingData.content;
     const chart = chartData.chart;
     const timeKnown = chart.birth.timeKnown;
 
     $("headline").textContent = content.headline;
-    $("core-read").textContent = content.core_read;
+    renderProse($("core-read"), content.core_read);
     $("next-step").textContent = content.next_step;
+
+    /* Each folded section says what is inside, so a closed one is still
+       informative rather than a mystery box. */
+    const sentences = paragraphs(content.core_read).length;
+    setFoldMeta("read-meta", `${sentences} ${sentences === 1 ? "part" : "parts"}`);
+    setFoldMeta("strengths-meta", countLabel(content.strengths.length, "strength", "strengths"));
+    setFoldMeta("friction-meta", countLabel(content.friction.length, "friction point", "friction points"));
+    setFoldMeta("timing-meta", countLabel(content.timing.length, "window", "windows"));
 
     const name = chart.birth.name ? `${chart.birth.name} · ` : "";
     const timeLabel = timeKnown ? chart.birth.time : "time unknown";

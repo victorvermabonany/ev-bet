@@ -93,14 +93,20 @@
   --sand: #e4daca;
   --sand-deep: #d3c5af;
   --ink-soft: #6b6157;
-  --ink-faint: #9a9083;
+  /* Darkened from #9a9083, which sat at 2.8:1 on the cream -- below AA for the
+     small print it is used on (birth line, receipts, plan cadence, meta). This
+     still reads as muted and clears 4.5:1 on both the cream and the card. */
+  --ink-faint: #766c5f;
+  /* The faint tone kept for hairlines and dividers, where contrast is not a
+     legibility question. */
+  --rule-faint: #9a9083;
 
   /* --- derived accent tints --- */
   --terracotta-deep: #9e4520;
   --terracotta-wash: #f8e7dd;
   --navy-soft: #3a4763;
   --navy-wash: #e8eaf0;
-  --gold-deep: #a8802f;
+  --gold-deep: #8a6520;   /* was #a8802f: 3.2:1 on cream, too low for tag text */
   --gold-wash: #f7efdc;
 
   --serif: 'Fraunces', 'Newsreader', Georgia, 'Times New Roman', serif;
@@ -404,7 +410,7 @@ a { color: var(--terracotta-deep); }
   font-size: 11.5px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--terracotta);
+  color: var(--terracotta-deep);
   margin-bottom: 22px;
   font-weight: 600;
 }
@@ -741,7 +747,7 @@ section.block { margin-bottom: 56px; }
 }
 
 .evidence b {
-  color: var(--terracotta);
+  color: var(--terracotta-deep);
   font-weight: 600;
   font-family: var(--sans);
   letter-spacing: 0.1em;
@@ -831,12 +837,12 @@ section.block { margin-bottom: 56px; }
 
 .receipt .body { font-size: 14px; font-weight: 500; }
 .receipt .pos { font-size: 12.5px; color: var(--ink-soft); }
-.receipt .rx { color: var(--terracotta); }
+.receipt .rx { color: var(--terracotta-deep); }
 
 .receipts-foot {
   margin-top: 18px;
   font-size: 12px;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
   line-height: 1.75;
 }
 
@@ -999,8 +1005,8 @@ section.block { margin-bottom: 56px; }
   line-height: 1.25;
 }
 
-.plan-cadence { font-size: 13.5px; color: var(--ink-faint); }
-.plan-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 4px; }
+.plan-cadence { font-size: 13.5px; color: var(--ink-soft); }
+.plan-note { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
 
 .plan-badge {
   position: absolute;
@@ -1646,4 +1652,180 @@ section.block { margin-bottom: 56px; }
 .hint.is-problem,
 #place-hint.is-problem {
   color: var(--terracotta-deep);
+}
+
+/* ========================================================================
+   Night layer — the app screens' quiet celestial ground
+   ========================================================================
+   Fixed behind everything and drawn in navy at 4–12% alpha. Deliberately
+   under the content rather than over it: cards are opaque, and body text on
+   the cream sits above dots faint enough that the measured contrast of a
+   glyph is unchanged. The landing page keeps its own full-strength sky. */
+
+.night {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  display: none;
+}
+
+/* Only on the app screens; the landing page has the real thing. */
+body.app-sky .night { display: block; }
+
+/* Everything real sits above the sky.
+   Deliberately NOT .nav: it already carries z-index 60, and restating it here
+   at equal specificity silently demoted it below the landing page's own
+   starfield canvas, which then swallowed every click on the nav CTA. */
+main, footer { position: relative; z-index: 1; }
+
+/* A whisper of deep navy at the top of the app screens, so the cream reads as
+   dawn rather than as blank paper. Stops well short of any text. */
+body.app-sky::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 320px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(31, 42, 68, 0.055), rgba(31, 42, 68, 0));
+}
+
+/* ---- Navy-accented section labels ------------------------------------- */
+
+.block-label {
+  color: var(--navy-soft);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* A four-point star on the section rule — the same mark as the wordmark,
+   at label scale. */
+.block-label::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  background: var(--navy-soft);
+  opacity: 0.55;
+  clip-path: polygon(50% 0%, 71% 29%, 100% 50%, 71% 71%, 50% 100%, 29% 71%, 0% 50%, 29% 29%);
+}
+
+.block-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(58, 71, 99, 0.22), rgba(58, 71, 99, 0.04));
+}
+
+/* ---- Folded reading sections ------------------------------------------
+   The full reading ran to ~3,850px of continuous prose. Folding puts every
+   section title within one screen, so the shape of the reading is legible
+   before you commit to reading it. Nothing is hidden that isn't counted in
+   its own header. */
+
+.fold {
+  background: var(--card);
+  border: 1px solid var(--sand);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.fold + .fold { margin-top: 14px; }
+
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 22px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.fold > summary::-webkit-details-marker { display: none; }
+
+.fold > summary:hover { background: rgba(31, 42, 68, 0.028); }
+
+.fold > summary:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: -3px;
+}
+
+.fold-title {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  flex: 1;
+  min-width: 0;
+}
+
+.fold-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The chevron, drawn rather than shipped, rotating on open. */
+.fold > summary::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-right: 1.6px solid var(--navy-soft);
+  border-bottom: 1.6px solid var(--navy-soft);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 0.18s ease;
+}
+
+.fold[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+
+.fold-body {
+  padding: 2px 22px 22px;
+  border-top: 1px solid var(--cream-deep);
+  padding-top: 18px;
+}
+
+/* ---- Prose split into paragraphs --------------------------------------
+   One six-line block is a wall; the same sentences in pairs are a read. */
+
+.prose { display: flex; flex-direction: column; gap: 14px; }
+
+.prose p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.62;
+  max-width: 64ch;
+}
+
+/* The opening sentence carries the summary, so it gets a little more weight. */
+.prose p:first-child { font-size: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fold > summary::after { transition: none; }
+}
+
+@media (max-width: 620px) {
+  .fold > summary { padding: 15px 16px; }
+  .fold-body { padding: 16px 16px 18px; }
+  .fold-title { font-size: 17px; }
+  .fold-meta { display: none; }
+}
+
+/* The inline code chip sat at 1.41:1 inside the offline notice -- present but
+   not readable. Given its own surface and ink. */
+.notice code,
+code {
+  color: var(--ink);
+  /* Opaque rather than a translucent tint: the chip sits on several different
+     surfaces, and a fixed pair is the only way its contrast is knowable. */
+  background: #e9ebf1;
+  border-color: #cfd5e0;
 }

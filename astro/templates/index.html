@@ -11,6 +11,11 @@
 </head>
 <body>
 
+<!-- The app screens sit on the same sky the charts are calculated from, at a
+     fraction of the landing page's strength. Fixed and behind everything, so
+     it never sits between the reader and a word of text. -->
+<canvas class="night" id="night" aria-hidden="true"></canvas>
+
 <!-- ---------- nav ---------- -->
 <nav class="nav" id="nav">
   <div class="wrap nav-inner">
@@ -356,25 +361,30 @@
       <code>ANTHROPIC_API_KEY</code> to enable the full interpretation.
     </div>
 
-    <section class="block">
-      <div class="block-label">The read</div>
-      <p class="lede" id="core-read"></p>
-    </section>
+    <!-- Folded rather than stacked. The full reading ran to nearly four
+         thousand pixels of continuous prose; this puts every section title on
+         one screen so the shape of the reading is visible before you commit to
+         reading it. Nothing is removed -- the dense sections simply start
+         closed, with their contents counted in the header. -->
+    <details class="fold" id="fold-read" open>
+      <summary><span class="fold-title">The read</span><span class="fold-meta" id="read-meta"></span></summary>
+      <div class="fold-body"><div class="prose" id="core-read"></div></div>
+    </details>
 
-    <section class="block">
-      <div class="block-label">What you have going for you</div>
-      <div class="cards" id="strengths"></div>
-    </section>
+    <details class="fold" id="fold-strengths" open>
+      <summary><span class="fold-title">What you have going for you</span><span class="fold-meta" id="strengths-meta"></span></summary>
+      <div class="fold-body"><div class="cards" id="strengths"></div></div>
+    </details>
 
-    <section class="block">
-      <div class="block-label">Where the friction is</div>
-      <div class="cards" id="friction"></div>
-    </section>
+    <details class="fold" id="fold-friction" open>
+      <summary><span class="fold-title">Where the friction is</span><span class="fold-meta" id="friction-meta"></span></summary>
+      <div class="fold-body"><div class="cards" id="friction"></div></div>
+    </details>
 
-    <section class="block">
-      <div class="block-label">Timing</div>
-      <div id="timing"></div>
-    </section>
+    <details class="fold" id="fold-timing">
+      <summary><span class="fold-title">Timing</span><span class="fold-meta" id="timing-meta"></span></summary>
+      <div class="fold-body"><div id="timing"></div></div>
+    </details>
 
     <section class="block">
       <div class="block-label">Do this next</div>
