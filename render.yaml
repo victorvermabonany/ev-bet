@@ -17,11 +17,12 @@ services:
     plan: free
     branch: claude/career-astrology-app-sgt5t7
     rootDir: astro
-    # The city index is precomputed here rather than in the worker. Building
-    # it at runtime cost ~139 MB and never completed on the free instance's
-    # fraction of a CPU, which is what took the live site down. Build memory is
-    # plentiful and this runs once per deploy instead of once per cold start.
-    buildCommand: pip install -r requirements.txt && python scripts/build_place_index.py
+    # Just the install. The city index is precomputed and committed at
+    # data/places.sqlite, so there is nothing to generate here -- and a build
+    # step that can fail is a build step that can take the whole deploy down,
+    # which is what generating it here appears to have done. Regenerate it with
+    # scripts/build_place_index.py and commit the result.
+    buildCommand: pip install -r requirements.txt
     # One worker, not two. With the index precomputed the process is far
     # lighter than it was (~139 MB of it went away), but a chart still costs
     # real CPU and the free instance only has a fraction of a core, so a second

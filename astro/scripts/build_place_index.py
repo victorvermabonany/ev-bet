@@ -96,8 +96,23 @@ def build(path: str = INDEX_PATH) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
 
+    # Streamed in batches rather than accumulated: holding 34k place tuples and
+    # ~196k name tuples alongside the source dataset roughly doubled peak
+    # memory, for no benefit.
     places_rows = []
     name_rows = []
+    total_places = 0
+    total_names = 0
+
+    def flush(force=False):
+        nonlocal total_places, total_names
+        if force or len(name_rows) > 20000:
+            conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", places_rows)
+            conn.executemany("INSERT INTO names VALUES (?,?,?)", name_rows)
+            total_places += len(places_rows)
+            total_names += len(name_rows)
+            places_rows.clear()
+            name_rows.clear()
 
     for index, record in enumerate(cache.get_cities().values()):
         country_code = record.get("countrycode", "")
@@ -132,8 +147,9 @@ def build(path: str = INDEX_PATH) -> None:
                 name_rows.append((key, index, 0))
                 seen.add(key)
 
-    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", places_rows)
-    conn.executemany("INSERT INTO names VALUES (?,?,?)", name_rows)
+        flush()
+
+    flush(force=True)
     conn.execute(
         "INSERT INTO meta VALUES ('normalizer', ?)",
         (normalizer_fingerprint(_normalize),),
@@ -144,7 +160,7 @@ def build(path: str = INDEX_PATH) -> None:
     conn.close()
 
     size = os.path.getsize(path) / (1024 * 1024)
-    print(f"built {path}: {len(places_rows):,} places, {len(name_rows):,} names, {size:.1f} MB")
+    print(f"built {path}: {total_places:,} places, {total_names:,} names, {size:.1f} MB")
 
 
 if __name__ == "__main__":
