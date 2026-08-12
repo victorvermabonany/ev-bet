@@ -616,6 +616,25 @@ def _warm_datasets() -> None:
 _warm_datasets()
 
 
+def _rewarm_after_fork() -> None:
+    """Start the warm-up again in a worker forked from a preloaded master.
+
+    `gunicorn --preload` imports this module once and forks the workers from
+    it, and a fork does not carry threads across. Without this the worker holds
+    inherited state claiming a compile is running, no thread running one, and
+    -- if the master had not finished before the fork -- no index either.
+
+    Cheap when the master did finish: the child's warm() finds the compiled
+    file already on disk and is ready in a file open.
+    """
+    places.reset_after_fork()
+    _warm_datasets()
+
+
+if hasattr(os, "register_at_fork"):   # POSIX only; Render is Linux
+    os.register_at_fork(after_in_child=_rewarm_after_fork)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=bool(os.environ.get("ASTRO_DEBUG")))

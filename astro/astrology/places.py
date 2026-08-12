@@ -262,6 +262,43 @@ COMPILE_WAIT_SECONDS = 75
 _warm_finished = threading.Event()
 
 
+def reset_after_fork() -> None:
+    """Re-arm the warm-up in a forked child.
+
+    Under `gunicorn --preload` the app is imported once in the master and the
+    workers are forked from it. A fork copies module globals but not threads,
+    so a child inherits a _warm_stage saying a compile is in progress with no
+    thread running one -- /health reported "compiling city index: starting,
+    631s" on a worker whose thread list did not contain the warm thread at all.
+
+    Worse than the bad reading: if the master's compile had not finished before
+    the fork, the child has no index and nothing on the way, so the first
+    request pays for the 139 MB in-memory build this module exists to avoid.
+
+    Three things cannot survive a fork and are rebuilt here rather than
+    inherited:
+
+      - Locks. A lock held by another thread when the fork happened stays held
+        forever in the child, because that thread does not exist to release it.
+      - The SQLite connection. Sharing one file descriptor across processes
+        corrupts both sides' cursor state; the child opens its own.
+      - The warm-up state, so the child actually runs one.
+
+    _index_cache is deliberately kept: it is plain data, assigned in one step
+    when complete, so a child that inherits it starts warm for free.
+    """
+    global _index_lock, _tf_lock, _db_lock, _db
+    global _warm_stage, _warm_started, _warm_finished
+
+    _index_lock = threading.Lock()
+    _tf_lock = threading.Lock()
+    _db_lock = threading.Lock()
+    _db = None
+    _warm_finished = threading.Event()
+    _warm_stage = "cold"
+    _warm_started = 0.0
+
+
 def _wait_for_compile() -> sqlite3.Connection | None:
     """Wait for an in-flight compile rather than racing it.
 

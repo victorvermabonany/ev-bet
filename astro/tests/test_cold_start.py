@@ -214,6 +214,42 @@ def test_the_compile_releases_an_index_a_request_already_built(cold, monkeypatch
     assert places._index_cache is None, "stale in-memory index was not released"
 
 
+def test_a_forked_child_re_arms_the_warm_up(cold):
+    """gunicorn --preload imports the app once and forks the workers from it.
+
+    A fork copies module globals but not threads. Without this the worker holds
+    state saying a compile is in progress and no thread running one: the
+    deployed /health reported "compiling city index: starting, 631s" on a
+    worker whose thread list did not contain the warm thread at all, and had
+    the master not finished compiling before the fork, that worker would have
+    had no index and nothing on the way to building one.
+    """
+    # State as a child inherits it mid-compile: a stage claiming to be
+    # compiling, the SQLite handle, and a lock the now-absent thread was
+    # holding when the fork happened.
+    places._warm_stage = places.COMPILING + ": writing places"
+    places._warm_started = time.monotonic()
+    places._db = object()
+    places._db_lock.acquire()
+
+    places.reset_after_fork()
+
+    assert places.warm_stage() == "cold", "child still claims a compile is running"
+    assert places._db is None, "a SQLite connection must not be shared across a fork"
+    assert places._db_lock.acquire(blocking=False), (
+        "inherited a lock held by a thread that does not exist in this process"
+    )
+    places._db_lock.release()
+    assert not places._warm_finished.is_set()
+
+
+def test_the_app_re_arms_the_warm_up_on_fork():
+    """The hook has to be registered, or the reset never runs."""
+    source = open(os.path.join(os.path.dirname(__file__), "..", "app.py")).read()
+    assert "register_at_fork" in source
+    assert "reset_after_fork" in source
+
+
 def test_the_index_is_never_visible_half_built(cold):
     """The app serves requests while the index compiles.
 
