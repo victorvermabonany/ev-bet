@@ -90,6 +90,11 @@ def _index() -> tuple[list[Place], dict[str, list[int]]]:
     return _index_cache
 
 
+def is_warm() -> bool:
+    """True once both datasets are built and a request will not have to wait."""
+    return _index_cache is not None and _tf_cache is not None
+
+
 def warm() -> None:
     """Build both datasets ahead of the first request.
 
@@ -266,4 +271,5 @@ def resolve_moment(
     )
 
 
-__all__ = ["Place", "ResolvedMoment", "search", "timezone_for", "resolve_moment"]
+__all__ = ["Place", "ResolvedMoment", "search", "timezone_for", "resolve_moment",
+           "warm", "is_warm"]

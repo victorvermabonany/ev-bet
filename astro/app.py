@@ -286,10 +286,19 @@ def index():
     return render_template("index.html", sky=sky.cached_snapshot())
 
 
+# Render sets this on every deploy. Surfacing it makes "is my fix actually
+# live?" answerable without guessing from behaviour.
+BUILD = (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7]
+
+
 @app.route("/health")
 def health():
     return jsonify({
         "ok": True,
+        "build": BUILD,
+        # Whether the datasets a chart needs are loaded yet. A cold worker
+        # answers this endpoint instantly while still warming in the background.
+        "warm": places.is_warm(),
         "aiConfigured": reading.api_configured(),
         "model": reading.MODEL,
         "voice": reading.VOICE,
