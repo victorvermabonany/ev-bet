@@ -135,7 +135,7 @@
       <p>
         We don't do compatibility, daily horoscopes, or sign clichés. If you don't
         know your birth time we'll say plainly which parts we can't calculate
-        rather than guessing. Nothing you enter is stored.
+        rather than guessing. Your birth details are never written to disk.
       </p>
       <button class="btn-primary hero-cta">Get your chart</button>
     </section>
@@ -279,7 +279,32 @@
           <button class="btn-primary btn-lg" id="unlock">Start free trial</button>
           <div class="paywall-note" id="paywall-note"></div>
           <div class="paywall-trust">
-            Secure checkout by Whop · cancel anytime · nothing stored by us
+            Secure checkout by Whop · cancel anytime · we save a random ID to
+            remember your subscription, never your birth details
+          </div>
+
+          <!-- Not every purchase starts here: a Whop product page, the
+               marketplace or a forwarded checkout link all arrive without the
+               session token, so the buyer needs a way to claim what they
+               already paid for. -->
+          <div class="claim">
+            <button type="button" class="link-button" id="claim-toggle"
+                    aria-expanded="false" aria-controls="claim-form">
+              Already subscribed?
+            </button>
+            <div class="claim-form hidden" id="claim-form">
+              <label for="claim-id">
+                Paste the membership ID from your Whop receipt
+              </label>
+              <div class="claim-row">
+                <input type="text" id="claim-id" name="claim-id"
+                       placeholder="mem_…" autocomplete="off" spellcheck="false">
+                <button type="button" class="btn-secondary" id="claim-submit">
+                  Restore
+                </button>
+              </div>
+              <div class="claim-note" id="claim-note" role="status"></div>
+            </div>
           </div>
         </div>
       </div>

@@ -54,20 +54,52 @@ ENTITLED_STATUSES = frozenset({"active", "trialing", "canceling"})
 _lock = threading.Lock()
 _connection: sqlite3.Connection | None = None
 
+# Two tables, not one.
+#
+# The original single `grants` table keyed access on (session_id, membership_id)
+# and so could not represent a purchase that had no session yet. That is not an
+# edge case: it is every purchase that does not begin at our own /api/checkout
+# -- a Whop product page, the marketplace, an affiliate link, a checkout URL
+# forwarded to a friend. Those arrived with no metadata and were dropped
+# entirely, meaning the customer paid and got nothing, and we kept no record
+# that it had happened.
+#
+# So: `memberships` records what Whop told us, always, whether or not we can yet
+# say whose browser it belongs to. `session_links` is the separate, later
+# question of which visitor may use it.
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS grants (
-    session_id    TEXT NOT NULL,
-    membership_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS memberships (
+    membership_id TEXT PRIMARY KEY,
     whop_user_id  TEXT,
+    email         TEXT,
     plan_id       TEXT,
     status        TEXT NOT NULL,
     valid_until   TEXT,
-    updated_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memberships_by_user ON memberships (whop_user_id);
+CREATE INDEX IF NOT EXISTS memberships_by_email ON memberships (email);
+
+CREATE TABLE IF NOT EXISTS session_links (
+    session_id    TEXT NOT NULL,
+    membership_id TEXT NOT NULL,
+    linked_at     TEXT NOT NULL,
     PRIMARY KEY (session_id, membership_id)
 );
-CREATE INDEX IF NOT EXISTS grants_by_session ON grants (session_id);
-CREATE INDEX IF NOT EXISTS grants_by_membership ON grants (membership_id);
-CREATE INDEX IF NOT EXISTS grants_by_user ON grants (whop_user_id);
+CREATE INDEX IF NOT EXISTS links_by_session ON session_links (session_id);
+CREATE INDEX IF NOT EXISTS links_by_membership ON session_links (membership_id);
+"""
+
+# The pre-split table. Carried forward on first connect so an existing
+# deployment does not lose live subscribers to a schema change.
+LEGACY_SCHEMA_MIGRATION = """
+INSERT OR IGNORE INTO memberships
+    (membership_id, whop_user_id, email, plan_id, status, valid_until, updated_at)
+SELECT membership_id, whop_user_id, NULL, plan_id, status, valid_until, updated_at
+FROM grants;
+
+INSERT OR IGNORE INTO session_links (session_id, membership_id, linked_at)
+SELECT session_id, membership_id, updated_at FROM grants;
 """
 
 
@@ -106,8 +138,22 @@ def _connect() -> sqlite3.Connection:
         _connection = sqlite3.connect(_resolve_db_path(), check_same_thread=False)
         _connection.row_factory = sqlite3.Row
         _connection.executescript(SCHEMA)
+        _migrate_legacy_grants(_connection)
         _connection.commit()
     return _connection
+
+
+def _migrate_legacy_grants(conn: sqlite3.Connection) -> None:
+    """Carry a pre-split `grants` table into the two-table schema."""
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='grants'"
+    ).fetchone()
+    if not exists:
+        return
+    conn.executescript(LEGACY_SCHEMA_MIGRATION)
+    moved = conn.execute("SELECT count(*) FROM grants").fetchone()[0]
+    conn.execute("ALTER TABLE grants RENAME TO grants_migrated")
+    log.info("migrated %d row(s) from the legacy grants table", moved)
 
 
 def init() -> None:
@@ -120,7 +166,8 @@ def reset_for_tests() -> None:
     global _connection
     with _lock:
         conn = _connect()
-        conn.execute("DELETE FROM grants")
+        conn.execute("DELETE FROM memberships")
+        conn.execute("DELETE FROM session_links")
         conn.commit()
 
 
@@ -150,59 +197,117 @@ def _parse_time(value) -> dt.datetime | None:
 
 
 def record_membership(
-    session_id: str,
     membership_id: str,
     status: str,
+    session_id: str | None = None,
     whop_user_id: str | None = None,
+    email: str | None = None,
     plan_id: str | None = None,
     valid_until=None,
 ) -> None:
-    """Upsert what a webhook told us about a membership."""
-    if not session_id or not membership_id:
-        raise ValueError("session_id and membership_id are required")
+    """Upsert what a webhook told us about a membership.
+
+    ``session_id`` is optional on purpose. A purchase is recorded whether or not
+    we yet know which browser it belongs to; binding it to a session is a
+    separate step that can happen now, later, or by hand.
+    """
+    if not membership_id:
+        raise ValueError("membership_id is required")
 
     expiry = _parse_time(valid_until)
     with _lock:
         conn = _connect()
         conn.execute(
             """
-            INSERT INTO grants
-                (session_id, membership_id, whop_user_id, plan_id, status,
+            INSERT INTO memberships
+                (membership_id, whop_user_id, email, plan_id, status,
                  valid_until, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(session_id, membership_id) DO UPDATE SET
-                whop_user_id = COALESCE(excluded.whop_user_id, grants.whop_user_id),
-                plan_id      = COALESCE(excluded.plan_id, grants.plan_id),
+            ON CONFLICT(membership_id) DO UPDATE SET
+                whop_user_id = COALESCE(excluded.whop_user_id, memberships.whop_user_id),
+                email        = COALESCE(excluded.email, memberships.email),
+                plan_id      = COALESCE(excluded.plan_id, memberships.plan_id),
                 status       = excluded.status,
                 valid_until  = excluded.valid_until,
                 updated_at   = excluded.updated_at
             """,
             (
-                session_id,
                 membership_id,
                 whop_user_id,
+                (email or "").strip().lower() or None,
                 plan_id,
                 (status or "").lower(),
                 expiry.isoformat() if expiry else None,
                 _now().isoformat(),
             ),
         )
+        if session_id:
+            conn.execute(
+                "INSERT OR IGNORE INTO session_links "
+                "(session_id, membership_id, linked_at) VALUES (?, ?, ?)",
+                (session_id, membership_id, _now().isoformat()),
+            )
         conn.commit()
 
 
-def update_membership_status(membership_id: str, status: str, valid_until=None) -> int:
-    """Apply a status change that arrived without our session metadata.
+def link_session(session_id: str, membership_id: str) -> bool:
+    """Bind a membership to a browser session. True if this created the link."""
+    if not session_id or not membership_id:
+        raise ValueError("session_id and membership_id are required")
+    with _lock:
+        conn = _connect()
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO session_links "
+            "(session_id, membership_id, linked_at) VALUES (?, ?, ?)",
+            (session_id, membership_id, _now().isoformat()),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
-    Cancellation and expiry webhooks identify the membership but do not
-    necessarily echo the metadata from checkout, so those are matched on the
-    membership ID we stored when it was created.
+
+def membership(membership_id: str) -> dict | None:
+    with _lock:
+        row = _connect().execute(
+            "SELECT * FROM memberships WHERE membership_id = ?", (membership_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def sessions_for_membership(membership_id: str) -> list[str]:
+    with _lock:
+        rows = _connect().execute(
+            "SELECT session_id FROM session_links WHERE membership_id = ?",
+            (membership_id,),
+        ).fetchall()
+    return [r["session_id"] for r in rows]
+
+
+def unclaimed_memberships() -> list[dict]:
+    """Live memberships nobody has claimed -- purchases owed an owner.
+
+    This is the operator's view of finding 01: anyone in this list paid and
+    cannot currently see what they bought.
     """
+    with _lock:
+        rows = _connect().execute(
+            """
+            SELECT m.* FROM memberships m
+            LEFT JOIN session_links l ON l.membership_id = m.membership_id
+            WHERE l.session_id IS NULL
+            ORDER BY m.updated_at DESC
+            """
+        ).fetchall()
+    return [dict(r) for r in rows if r["status"] in ENTITLED_STATUSES]
+
+
+def update_membership_status(membership_id: str, status: str, valid_until=None) -> int:
+    """Apply a lifecycle change to a membership we already know about."""
     expiry = _parse_time(valid_until)
     with _lock:
         conn = _connect()
         cursor = conn.execute(
             """
-            UPDATE grants
+            UPDATE memberships
                SET status = ?,
                    valid_until = COALESCE(?, valid_until),
                    updated_at = ?
@@ -232,7 +337,12 @@ def entitlement(session_id: str) -> dict:
 
     with _lock:
         rows = _connect().execute(
-            "SELECT * FROM grants WHERE session_id = ? ORDER BY updated_at DESC",
+            """
+            SELECT m.* FROM session_links l
+            JOIN memberships m ON m.membership_id = l.membership_id
+            WHERE l.session_id = ?
+            ORDER BY m.updated_at DESC
+            """,
             (session_id,),
         ).fetchall()
 
@@ -268,7 +378,12 @@ def entitlement(session_id: str) -> dict:
 def grants_for_session(session_id: str) -> list[dict]:
     with _lock:
         rows = _connect().execute(
-            "SELECT * FROM grants WHERE session_id = ?", (session_id,)
+            """
+            SELECT m.*, l.session_id FROM session_links l
+            JOIN memberships m ON m.membership_id = l.membership_id
+            WHERE l.session_id = ?
+            """,
+            (session_id,),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -379,6 +494,9 @@ def parse_event(payload: dict) -> dict:
         "membership_id": membership_id,
         "session_id": metadata.get("sid") or metadata.get("session_id"),
         "whop_user_id": _dig(body, "user_id", "whop_user_id"),
+        # Captured so a paying customer is reachable. Without it, a purchase we
+        # cannot bind to a session is also a customer we cannot contact.
+        "email": _dig(body, "email", "user_email", "customer_email"),
         "plan_id": _dig(body, "plan_id"),
         "status": (_dig(body, "status") or "").lower(),
         "valid_until": _dig(
@@ -388,7 +506,13 @@ def parse_event(payload: dict) -> dict:
 
 
 def apply_event(payload: dict) -> dict:
-    """Record a webhook. Returns a summary for logging and tests."""
+    """Record a webhook. Returns a summary for logging and tests.
+
+    The rule is that a verified purchase is *always* written down, even when we
+    cannot yet say whose it is. Previously an event with no session metadata and
+    no matching row was discarded, which meant a customer could pay and leave no
+    trace at all -- nothing to reconcile, nothing to support them with.
+    """
     parsed = parse_event(payload)
     event = parsed["event"]
     membership_id = parsed["membership_id"]
@@ -403,27 +527,83 @@ def apply_event(payload: dict) -> dict:
     if not status:
         status = "expired" if revoking else "active"
 
-    if parsed["session_id"] and not revoking and granting:
+    if revoking or not granting:
+        changed = update_membership_status(membership_id, status, parsed["valid_until"])
+        if changed:
+            return {"applied": True, "action": "updated", "rows": changed, **parsed}
+        # A revocation for something we never recorded. Write it down anyway so
+        # the state is right if a later event refers to it.
         record_membership(
-            session_id=parsed["session_id"],
             membership_id=membership_id,
             status=status,
             whop_user_id=parsed["whop_user_id"],
+            email=parsed["email"],
             plan_id=parsed["plan_id"],
             valid_until=parsed["valid_until"],
         )
+        return {"applied": True, "action": "recorded-inactive", **parsed}
+
+    record_membership(
+        membership_id=membership_id,
+        status=status,
+        session_id=parsed["session_id"],
+        whop_user_id=parsed["whop_user_id"],
+        email=parsed["email"],
+        plan_id=parsed["plan_id"],
+        valid_until=parsed["valid_until"],
+    )
+
+    if parsed["session_id"]:
         return {"applied": True, "action": "granted", **parsed}
 
-    # No session metadata: a lifecycle change on a membership we already know.
-    changed = update_membership_status(membership_id, status, parsed["valid_until"])
-    if changed:
-        return {"applied": True, "action": "updated", "rows": changed, **parsed}
+    # Bought somewhere other than our own checkout, so there is no session to
+    # attach it to yet. The purchase is safe; it now needs claiming. Logged at
+    # warning level because somebody has paid and cannot yet see what they
+    # bought -- that should be visible in the logs, not silent.
+    log.warning(
+        "unclaimed membership %s (whop_user=%s email=%s): paid, but no session "
+        "metadata to bind it to. Awaiting /api/claim.",
+        membership_id, parsed["whop_user_id"], parsed["email"],
+    )
+    return {"applied": True, "action": "recorded-unclaimed", **parsed}
 
-    return {
-        "applied": False,
-        "reason": "unknown membership and no session metadata",
-        **parsed,
-    }
+
+def claim(session_id: str, membership_id: str) -> dict:
+    """Bind a paid-for membership to the browser session asking for it.
+
+    The membership id is the shared secret. Whop shows it to the buyer on their
+    receipt and in their account, it is high-entropy and unguessable, and it is
+    only ever accepted for a membership that is currently live -- so this is a
+    licence-key claim, not a lookup by anything a stranger could enumerate.
+
+    Deliberately *not* claim-by-email: an email address is not a secret, and
+    letting one bind a subscription would hand over paid access to anyone who
+    could guess a customer's address. Whop OAuth is the better long-term
+    answer; this closes the hole in the meantime.
+    """
+    if not session_id:
+        return {"claimed": False, "reason": "no session"}
+
+    membership_id = (membership_id or "").strip()
+    if not membership_id:
+        return {"claimed": False, "reason": "no membership id"}
+
+    record = membership(membership_id)
+    if record is None:
+        return {"claimed": False, "reason": "not found"}
+
+    if record["status"] not in ENTITLED_STATUSES:
+        return {"claimed": False, "reason": "not active"}
+
+    expiry = _parse_time(record["valid_until"])
+    if expiry and expiry <= _now():
+        return {"claimed": False, "reason": "expired"}
+
+    created = link_session(session_id, membership_id)
+    log.info(
+        "membership %s claimed by a session (new link: %s)", membership_id, created
+    )
+    return {"claimed": True, "membershipId": membership_id, "new": created}
 
 
 __all__ = [
@@ -431,4 +611,6 @@ __all__ = [
     "init", "reset_for_tests", "new_session_id", "record_membership",
     "update_membership_status", "entitlement", "grants_for_session",
     "verify_webhook", "webhook_secret", "parse_event", "apply_event",
+    "claim", "link_session", "membership", "sessions_for_membership",
+    "unclaimed_memberships",
 ]

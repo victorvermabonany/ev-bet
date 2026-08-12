@@ -81,6 +81,11 @@ def session_of(client) -> str:
     return client.get_cookie(entitlements.COOKIE_NAME).value
 
 
+def reading_tier(client) -> str:
+    """The tier this client actually gets back -- the only thing that matters."""
+    return client.post("/api/reading", json=BIRTH).get_json()["tier"]
+
+
 def membership_payload(session_id: str, **overrides) -> dict:
     data = {
         "id": "mem_TEST1",
@@ -282,14 +287,26 @@ def test_cancellation_webhook_revokes_access(client):
     assert client.post("/api/reading", json=BIRTH).get_json()["tier"] == "free"
 
 
-def test_webhook_for_unknown_membership_is_acknowledged_not_applied(client):
-    """Whop retries non-2xx, and retrying will not fix an unmatchable event."""
+def test_webhook_for_unknown_membership_is_recorded_not_dropped(client):
+    """A membership we have never seen is still written down.
+
+    Whop retries non-2xx and retrying cannot fix an unmatchable event, so this
+    stays a 200. What changed is that the event is no longer discarded: an
+    unrecorded cancellation used to vanish, leaving the row absent if a later
+    event referred to it.
+    """
     response = send_webhook(client, {
         "event": "membership.went_invalid",
         "data": {"id": "mem_NEVER_SEEN", "status": "expired"},
     })
     assert response.status_code == 200
-    assert response.get_json()["applied"] is False
+    assert response.get_json()["applied"] is True
+
+    stored = entitlements.membership("mem_NEVER_SEEN")
+    assert stored is not None
+    assert stored["status"] == "expired"
+    # Recorded, but it entitles nobody.
+    assert entitlements.sessions_for_membership("mem_NEVER_SEEN") == []
 
 
 def test_repeated_webhooks_are_idempotent(client):
@@ -363,3 +380,160 @@ def test_parse_event_finds_metadata_in_nested_payloads():
     })
     assert parsed["session_id"] == "abc"
     assert parsed["status"] == "active"
+
+
+# ---------------------------------------------------------------------------
+# Finding 01: purchases that do not begin at our own checkout
+# ---------------------------------------------------------------------------
+
+
+def test_purchase_without_session_metadata_is_kept_and_claimable(client):
+    """The audit's worst case: paid via a Whop link, no metadata, nothing lost.
+
+    This previously returned applied: False and wrote nothing at all, so the
+    customer paid, saw no change, and left no record to support them with.
+    """
+    response = send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {
+            "id": "mem_via_whop_link",
+            "status": "active",
+            "user_id": "user_real",
+            "email": "Buyer@Example.com",
+            "plan_id": "plan_weekly",
+        },
+    })
+    assert response.status_code == 200
+    assert response.get_json()["applied"] is True
+
+    stored = entitlements.membership("mem_via_whop_link")
+    assert stored["status"] == "active"
+    # The email is captured, so a paying customer is reachable.
+    assert stored["email"] == "buyer@example.com"
+
+    # It belongs to nobody yet, and grants nobody access.
+    assert entitlements.sessions_for_membership("mem_via_whop_link") == []
+    assert [m["membership_id"] for m in entitlements.unclaimed_memberships()] == [
+        "mem_via_whop_link"
+    ]
+    assert reading_tier(client) == "free"
+
+    # The buyer claims it with the id from their Whop receipt.
+    claimed = client.post("/api/claim", json={"membershipId": "mem_via_whop_link"})
+    assert claimed.status_code == 200
+    assert claimed.get_json()["entitlement"]["entitled"] is True
+    assert reading_tier(client) == "paid"
+    assert entitlements.unclaimed_memberships() == []
+
+
+def test_claiming_needs_the_real_membership_id(client):
+    send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {"id": "mem_secret_id", "status": "active"},
+    })
+    for guess in ("", "mem_", "mem_wrong", "MEM_SECRET_ID "):
+        response = client.post("/api/claim", json={"membershipId": guess})
+        assert response.status_code == 404, guess
+    assert reading_tier(client) == "free"
+
+
+def test_expired_membership_cannot_be_claimed(client):
+    send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {
+            "id": "mem_lapsed",
+            "status": "active",
+            "renewal_period_end": int(dt.datetime.now(dt.timezone.utc).timestamp()) - 60,
+        },
+    })
+    response = client.post("/api/claim", json={"membershipId": "mem_lapsed"})
+    assert response.status_code == 404
+    assert reading_tier(client) == "free"
+
+
+def test_cancelled_membership_cannot_be_claimed(client):
+    send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {"id": "mem_gone", "status": "active"},
+    })
+    send_webhook(client, {
+        "event": "membership.went_invalid",
+        "data": {"id": "mem_gone", "status": "expired"},
+    })
+    response = client.post("/api/claim", json={"membershipId": "mem_gone"})
+    assert response.status_code == 404
+    assert reading_tier(client) == "free"
+
+
+def test_claim_does_not_transfer_access_away_from_the_buyer(client):
+    """Claiming adds a link; it does not move one."""
+    send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {"id": "mem_shared", "status": "active"},
+    })
+    client.post("/api/claim", json={"membershipId": "mem_shared"})
+    assert reading_tier(client) == "paid"
+
+    from app import app as flask_app
+
+    second = flask_app.test_client()
+    second.get("/")
+    second.post("/api/claim", json={"membershipId": "mem_shared"})
+
+    # Both now hold it -- a licence key that is shared is shared, which is why
+    # the id must come from the receipt rather than anything guessable.
+    assert reading_tier(client) == "paid"
+    assert len(entitlements.sessions_for_membership("mem_shared")) == 2
+
+
+def test_cancellation_after_a_claim_revokes_access(client):
+    send_webhook(client, {
+        "event": "membership.went_valid",
+        "data": {"id": "mem_claim_then_cancel", "status": "active"},
+    })
+    client.post("/api/claim", json={"membershipId": "mem_claim_then_cancel"})
+    assert reading_tier(client) == "paid"
+
+    send_webhook(client, {
+        "event": "membership.went_invalid",
+        "data": {"id": "mem_claim_then_cancel", "status": "expired"},
+    })
+    assert reading_tier(client) == "free"
+
+
+def test_legacy_grants_table_is_migrated(tmp_path, monkeypatch):
+    """An existing deployment must not lose live subscribers to the split."""
+    import importlib
+    import sqlite3
+
+    db = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE grants (
+            session_id TEXT NOT NULL, membership_id TEXT NOT NULL,
+            whop_user_id TEXT, plan_id TEXT, status TEXT NOT NULL,
+            valid_until TEXT, updated_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, membership_id));
+        INSERT INTO grants VALUES
+            ('sid_existing', 'mem_existing', 'user_1', 'plan_weekly',
+             'active', NULL, '2026-01-01T00:00:00+00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    original_path = os.environ["ASTRO_DB_PATH"]
+    try:
+        monkeypatch.setenv("ASTRO_DB_PATH", str(db))
+        module = importlib.reload(entitlements)
+        module.init()
+
+        assert module.entitlement("sid_existing")["entitled"] is True
+        assert module.membership("mem_existing")["plan_id"] == "plan_weekly"
+    finally:
+        # Reload leaves the module bound to the scratch database, and every
+        # other test in the file shares this module object.
+        os.environ["ASTRO_DB_PATH"] = original_path
+        importlib.reload(entitlements)
+        entitlements.init()

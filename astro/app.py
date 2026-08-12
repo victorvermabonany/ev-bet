@@ -19,18 +19,79 @@ from collections import OrderedDict
 
 from flask import Flask, Response, g, jsonify, render_template, request
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from astrology import career, entitlements, places, reading, whop_api
+from astrology import career, entitlements, places, ratelimit, reading, whop_api
 from astrology.chart import BirthData, build_chart
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+
+# Render (and every other PaaS) terminates TLS at the edge and forwards plain
+# HTTP. Without this, request.is_secure is False on an HTTPS site, which meant
+# the session cookie -- the bearer token for paid access -- shipped without the
+# Secure flag. Trust exactly one hop, the platform's own proxy.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1)
+
+# Cross-origin access is off by default. The API only ever serves this app's own
+# page, and leaving it open let any site drive the (billable) reading endpoint.
+# Set ASTRO_ALLOWED_ORIGINS to a comma-separated list to opt specific ones in.
+_allowed_origins = [
+    o.strip() for o in os.environ.get("ASTRO_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+if _allowed_origins:
+    CORS(app, origins=_allowed_origins, supports_credentials=True)
 
 CACHE_LIMIT = 256
 _chart_cache: OrderedDict[str, tuple] = OrderedDict()
+
+# Generated readings, keyed by chart + tier. Without this every page refresh was
+# a fresh Opus generation of up to 8k tokens -- the single largest cost in the
+# product, paid again for output the user had already seen.
+READING_CACHE_LIMIT = 512
+_reading_cache: OrderedDict[str, dict] = OrderedDict()
+
+# Per-hour ceilings. The reading and question endpoints cost real money on every
+# miss, so they are the tight ones; charts are only CPU.
+RATE_LIMITS = {
+    "reading": int(os.environ.get("ASTRO_LIMIT_READING", "20")),
+    "question": int(os.environ.get("ASTRO_LIMIT_QUESTION", "40")),
+    "chart": int(os.environ.get("ASTRO_LIMIT_CHART", "120")),
+    "checkout": int(os.environ.get("ASTRO_LIMIT_CHECKOUT", "20")),
+    "claim": int(os.environ.get("ASTRO_LIMIT_CLAIM", "10")),
+}
+RATE_WINDOW = 3600
+
+
+def _client_ip() -> str:
+    """The caller's address, trusting exactly the one proxy hop ProxyFix does."""
+    return request.remote_addr or "unknown"
+
+
+def enforce_limit(bucket: str, identity: str | None = None):
+    """Apply the bucket's ceiling. Returns a 429 response, or None to continue.
+
+    Skipped under TESTING so the suite is not fighting a shared counter; the
+    limiter itself is covered directly in tests/test_ratelimit.py.
+    """
+    if app.testing:
+        return None
+    decision = ratelimit.check(
+        bucket, identity or _client_ip(), RATE_LIMITS[bucket], RATE_WINDOW
+    )
+    if decision.allowed:
+        return None
+    log.warning("rate limit hit: bucket=%s identity=%s", bucket, identity or _client_ip())
+    response = jsonify({
+        "error": "You've made a lot of requests in a short time. "
+                 "Try again in a few minutes.",
+        "retryAfter": decision.retry_after,
+    })
+    response.status_code = 429
+    response.headers["Retry-After"] = str(decision.retry_after)
+    return response
 
 # Whop pricing. Plan IDs come from astro/scripts/setup_whop.sh; the labels live
 # here so the paywall copy has one source of truth and can change without a
@@ -134,7 +195,7 @@ def _parse_birth(payload: dict):
 
     if key in _chart_cache:
         _chart_cache.move_to_end(key)
-        return _chart_cache[key]
+        return (key, *_chart_cache[key])
 
     try:
         moment = places.resolve_moment(birth_date, birth_time, timezone_name)
@@ -161,7 +222,7 @@ def _parse_birth(payload: dict):
     _chart_cache.move_to_end(key)
     while len(_chart_cache) > CACHE_LIMIT:
         _chart_cache.popitem(last=False)
-    return result
+    return (key, *result)
 
 
 def whop_config() -> dict:
@@ -203,7 +264,11 @@ def _persist_session(response):
             max_age=entitlements.COOKIE_MAX_AGE,
             httponly=True,        # never readable from JavaScript
             samesite="Lax",       # survives the return trip from Whop checkout
-            secure=not app.debug and request.is_secure,
+            # Secure unless this is genuinely a local plaintext session. With
+            # ProxyFix in place is_secure reflects X-Forwarded-Proto, so a
+            # deployed site always sets it; ASTRO_INSECURE_COOKIE is the escape
+            # hatch for testing over plain HTTP on a LAN address.
+            secure=request.is_secure or not os.environ.get("ASTRO_INSECURE_COOKIE"),
         )
     return response
 
@@ -233,7 +298,10 @@ def api_places():
 
 @app.route("/api/chart", methods=["POST"])
 def api_chart():
-    chart, profile, timing = _parse_birth(request.get_json(silent=True) or {})
+    limited = enforce_limit("chart")
+    if limited:
+        return limited
+    _key, chart, profile, timing = _parse_birth(request.get_json(silent=True) or {})
     return jsonify({
         "chart": chart.to_dict(),
         "profile": profile.to_dict(),
@@ -254,9 +322,28 @@ def api_reading():
     access = entitlements.entitlement(session_id())
     tier = "paid" if access["entitled"] else "free"
 
-    chart, profile, timing = _parse_birth(payload)
-    result = reading.generate(chart, profile, timing, tier)
-    return jsonify({**result.to_dict(), "entitlement": access})
+    key, chart, profile, timing = _parse_birth(payload)
+
+    # Same chart, same tier -> same reading. Serving it from cache is what stops
+    # a refresh (or a script) from billing another Opus generation, so the check
+    # happens before the rate limit is spent as well.
+    cache_key = f"{key}:{tier}"
+    cached = _reading_cache.get(cache_key)
+    if cached is not None:
+        _reading_cache.move_to_end(cache_key)
+        return jsonify({**cached, "entitlement": access, "cached": True})
+
+    limited = enforce_limit("reading")
+    if limited:
+        return limited
+
+    result = reading.generate(chart, profile, timing, tier).to_dict()
+    _reading_cache[cache_key] = result
+    _reading_cache.move_to_end(cache_key)
+    while len(_reading_cache) > READING_CACHE_LIMIT:
+        _reading_cache.popitem(last=False)
+
+    return jsonify({**result, "entitlement": access, "cached": False})
 
 
 @app.route("/api/question", methods=["POST"])
@@ -272,7 +359,13 @@ def api_question():
     if not entitlements.entitlement(session_id())["entitled"]:
         return jsonify({"error": "This needs an active subscription."}), 402
 
-    chart, profile, timing = _parse_birth(payload)
+    # Keyed by session, not IP: a subscriber has paid for this, and several of
+    # them can legitimately share an office address.
+    limited = enforce_limit("question", session_id())
+    if limited:
+        return limited
+
+    _key, chart, profile, timing = _parse_birth(payload)
 
     def stream():
         try:
@@ -304,6 +397,10 @@ def api_checkout():
     hand it back and tell us which visitor just paid. This is the whole of the
     identity mechanism: no password, no email, no account.
     """
+    limited = enforce_limit("checkout")
+    if limited:
+        return limited
+
     payload = request.get_json(silent=True) or {}
     plan_key = payload.get("plan")
     plan = next((p for p in WHOP_PLANS if p["key"] == plan_key), None)
@@ -352,6 +449,38 @@ def api_whop_webhook():
     # Always 200 on a verified event: a non-2xx makes Whop retry, and retrying
     # will not fix a payload we could not match to anything.
     return jsonify({"received": True, "applied": result.get("applied", False)})
+
+
+@app.route("/api/claim", methods=["POST"])
+def api_claim():
+    """Attach a purchase made outside our checkout to this browser.
+
+    Needed because not every purchase starts at /api/checkout -- a Whop product
+    page, the marketplace, an affiliate link or a forwarded checkout URL all
+    arrive with no session metadata. Those are recorded but unowned; this is how
+    the buyer takes ownership, using the membership id from their Whop receipt.
+    """
+    limited = enforce_limit("claim")
+    if limited:
+        return limited
+
+    payload = request.get_json(silent=True) or {}
+    result = entitlements.claim(session_id(), payload.get("membershipId"))
+
+    if not result["claimed"]:
+        messages = {
+            "not found": "We couldn't find that membership. Check the ID on your "
+                         "Whop receipt and try again.",
+            "not active": "That subscription isn't active any more.",
+            "expired": "That subscription has expired.",
+            "no membership id": "Enter the membership ID from your Whop receipt.",
+            "no session": "Your browser isn't accepting cookies, so we can't "
+                          "remember this. Enable them and try again.",
+        }
+        reason = result.get("reason", "")
+        return jsonify({"error": messages.get(reason, "That didn't work.")}), 404
+
+    return jsonify({"claimed": True, "entitlement": entitlements.entitlement(session_id())})
 
 
 @app.route("/api/config")

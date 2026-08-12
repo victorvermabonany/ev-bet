@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end proof that the paywall is enforced server-side.
 set -u
-BASE=http://127.0.0.1:5001
-SECRET=live-secret-abc
+BASE=${1:-http://127.0.0.1:5001}
+SECRET=${WHOP_WEBHOOK_SECRET:-live-secret-abc}
 JAR=$(mktemp)
 BIRTH='"name":"Proof","date":"1990-04-17","time":"09:25","timeKnown":true,"place":"London, United Kingdom","latitude":51.5085,"longitude":-0.1257,"timezone":"Europe/London"'
 
@@ -97,6 +97,34 @@ BODY=$(python3 -c 'import json,sys;print(json.dumps({"action":"membership.went_i
 curl -s -o /dev/null -X POST "$BASE/api/whop/webhook" -H 'Content-Type: application/json' -H "X-Whop-Signature: $(printf '%s' "$BODY" | sign "$SECRET")" -d "$BODY"
 T9=$(curl -s -b "$JAR" -X POST "$BASE/api/reading" -H 'Content-Type: application/json' -d "{$BIRTH}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tier"])')
 check "tier returned" "free" "$T9"
+
+echo
+echo "== 10. Launch blockers =="
+
+echo "-- 01: a purchase made outside our checkout is kept, not dropped"
+BODY=$(python3 -c 'import json,time;print(json.dumps({"action":"membership.went_valid","data":{"id":"mem_no_metadata","status":"active","user_id":"user_paid","email":"Buyer@Example.com","plan_id":"plan_weekly","renewal_period_end":int(time.time())+2592000}}))')
+R=$(curl -s -X POST "$BASE/api/whop/webhook" -H 'Content-Type: application/json' -H "X-Whop-Signature: sha256=$(printf '%s' "$BODY" | sign "$SECRET")" -d "$BODY")
+check "webhook applied"  "True" "$(echo "$R" | python3 -c 'import json,sys;print(json.load(sys.stdin)["applied"])')"
+
+JAR3=$(mktemp); curl -s -c "$JAR3" "$BASE/" > /dev/null
+check "grants nobody access yet" "free" "$(curl -s -b "$JAR3" -X POST "$BASE/api/reading" -H 'Content-Type: application/json' -d "{$BIRTH}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tier"])')"
+check "wrong id is refused"      "404"  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR3" -X POST "$BASE/api/claim" -H 'Content-Type: application/json' -d '{"membershipId":"mem_guess"}')"
+check "buyer claims it"          "200"  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR3" -X POST "$BASE/api/claim" -H 'Content-Type: application/json' -d '{"membershipId":"mem_no_metadata"}')"
+check "and now sees paid"        "paid" "$(curl -s -b "$JAR3" -X POST "$BASE/api/reading" -H 'Content-Type: application/json' -d "{$BIRTH}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tier"])')"
+
+echo "-- 02: a repeat reading is served from cache, not regenerated"
+JAR4=$(mktemp); curl -s -c "$JAR4" "$BASE/" > /dev/null
+B2='"name":"CacheProof","date":"1993-07-22","time":"11:11","timeKnown":true,"place":"Oslo","latitude":59.9127,"longitude":10.7461,"timezone":"Europe/Oslo"'
+check "first call generates"  "False" "$(curl -s -b "$JAR4" -X POST "$BASE/api/reading" -H 'Content-Type: application/json' -d "{$B2}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cached"])')"
+check "second is cached"      "True"  "$(curl -s -b "$JAR4" -X POST "$BASE/api/reading" -H 'Content-Type: application/json' -d "{$B2}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["cached"])')"
+
+echo "-- 02: cross-origin requests are not invited in"
+check "no ACAO header" "" "$(curl -s -D- -o /dev/null -X POST "$BASE/api/reading" -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -d "{$BIRTH}" | grep -i '^access-control-allow-origin' | tr -d '\r')"
+
+echo "-- 03: the session cookie is Secure behind a TLS-terminating proxy"
+COOKIE=$(curl -s -D- -o /dev/null "$BASE/" -H 'X-Forwarded-Proto: https' | grep -i '^set-cookie' | tr -d '\r')
+check "Secure flag present"   "yes" "$(echo "$COOKIE" | grep -qi 'Secure'   && echo yes || echo no)"
+check "HttpOnly flag present" "yes" "$(echo "$COOKIE" | grep -qi 'HttpOnly' && echo yes || echo no)"
 
 echo
 echo "-------------------------------------------"

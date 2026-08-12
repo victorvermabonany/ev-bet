@@ -455,6 +455,61 @@
     }
   }
 
+  /* Claiming a subscription bought outside our own checkout. Those purchases
+     carry no session token, so the server records them unowned and the buyer
+     binds one to this browser with the membership ID from their receipt. */
+  $("claim-toggle").addEventListener("click", () => {
+    const form = $("claim-form");
+    const opening = form.classList.contains("hidden");
+    form.classList.toggle("hidden", !opening);
+    $("claim-toggle").setAttribute("aria-expanded", String(opening));
+    if (opening) $("claim-id").focus();
+  });
+
+  async function submitClaim() {
+    const button = $("claim-submit");
+    const note = $("claim-note");
+    const membershipId = $("claim-id").value.trim();
+
+    note.classList.remove("is-error");
+    if (!membershipId) {
+      note.textContent = "Enter the membership ID from your Whop receipt.";
+      note.classList.add("is-error");
+      return;
+    }
+
+    button.disabled = true;
+    note.textContent = "Checking…";
+    try {
+      const response = await fetch("/api/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        note.textContent = body.error || "That didn't work.";
+        note.classList.add("is-error");
+        return;
+      }
+      note.textContent = "Restored. Loading your full reading…";
+      const reading = await refreshReading();
+      if (reading.tier === "paid") {
+        $("ask-block").scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    } catch (error) {
+      note.textContent = error.message;
+      note.classList.add("is-error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  $("claim-submit").addEventListener("click", submitClaim);
+  $("claim-id").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitClaim();
+  });
+
   // Whop reports checkout outcomes by posting a message to the host page.
   window.addEventListener("message", async (event) => {
     if (!/whop\.com$/.test(new URL(event.origin).hostname)) return;
