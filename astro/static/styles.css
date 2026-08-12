@@ -567,15 +567,20 @@ button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  background: var(--terracotta);
+  /* --terracotta-deep rather than the exact brand --terracotta. White on the
+     brand hex measures 4.44:1, just under AA for this size; the deep tint is
+     6.31:1. Scoped to buttons only -- the exact brand terracotta still carries
+     every other accent (the headline clause, links, tags, the logo mark), so
+     the palette is unchanged apart from the one place white text sits on it. */
+  background: var(--terracotta-deep);
   color: #fff;
   padding: 15px 32px;
   font-weight: 600;
   letter-spacing: 0.005em;
-  box-shadow: 0 2px 10px rgba(193, 89, 43, 0.22);
+  box-shadow: 0 2px 10px rgba(158, 69, 32, 0.24);
 }
 
-.btn-primary:hover:not(:disabled) { background: var(--terracotta-deep); }
+.btn-primary:hover:not(:disabled) { background: #8a3c1b; }
 
 /* One primary CTA per screen is the rule, so a genuinely secondary action is
    demoted to a text link rather than given a button that competes for the eye. */
