@@ -62,8 +62,13 @@ CREATE INDEX places_pop ON places (population DESC);
 """
 
 
-def build(path: str = INDEX_PATH) -> None:
+def build(path: str = INDEX_PATH, progress=None) -> None:
     """Compile the index and put it at ``path`` in one step.
+
+    ``progress`` is called with a short phase name as each stage starts. The
+    deployed instance is a fraction of a CPU and there is no log access from
+    here, so /health reporting "compacting, 94s" rather than a flat "compiling"
+    is the difference between seeing where the time goes and guessing at it.
 
     The compile writes to a sibling temporary file and renames it into place,
     because the app is serving requests while this runs. Building directly into
@@ -85,7 +90,7 @@ def build(path: str = INDEX_PATH) -> None:
             os.remove(stale)
 
     try:
-        _compile(staging)
+        _compile(staging, progress or (lambda phase: None))
         os.replace(staging, path)
     finally:
         if os.path.exists(staging):
@@ -95,11 +100,13 @@ def build(path: str = INDEX_PATH) -> None:
     print(f"built {path}: {size:.1f} MB")
 
 
-def _compile(path: str) -> None:
+def _compile(path: str, progress) -> None:
+    progress("loading city data")
     cache = geonamescache.GeonamesCache()
     countries = {code: info["name"] for code, info in cache.get_countries().items()}
     us_states = {code: info["name"] for code, info in cache.get_us_states().items()}
 
+    progress("writing places")
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
 
@@ -161,8 +168,11 @@ def _compile(path: str) -> None:
         "INSERT INTO meta VALUES ('normalizer', ?)",
         (normalizer_fingerprint(_normalize),),
     )
+    progress("indexing")
     conn.executescript(INDEXES)
     conn.commit()
+
+    progress("compacting")
     conn.execute("VACUUM")
     conn.close()
 

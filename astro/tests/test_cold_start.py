@@ -187,10 +187,10 @@ def test_a_request_during_the_compile_waits_instead_of_racing_it(cold):
     warming.start()
     # Wait until the compile is genuinely under way, then search.
     for _ in range(500):
-        if places.warm_stage() == "compiling city index":
+        if places.warm_stage().startswith(places.COMPILING):
             break
         time.sleep(0.002)
-    assert places.warm_stage() == "compiling city index"
+    assert places.warm_stage().startswith(places.COMPILING)
 
     results = places.search("San Fr", 3)
     warming.join(timeout=60)

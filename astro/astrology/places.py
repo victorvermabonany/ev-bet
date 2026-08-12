@@ -19,6 +19,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 import unicodedata
 from dataclasses import dataclass, asdict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -105,7 +106,10 @@ INDEX_PATH = os.environ.get("ASTRO_INDEX_PATH") or os.path.join(
 _db_lock = threading.Lock()
 _db: sqlite3.Connection | None = None
 
+COMPILING = "compiling city index"
+
 _warm_stage = "cold"
+_warm_started = 0.0
 
 
 def _database() -> sqlite3.Connection | None:
@@ -195,6 +199,8 @@ def warm_stage() -> str:
     second locally can take far longer there. Reporting the stage turns "it is
     hanging" into "it is on the timezone dataset".
     """
+    if _warm_stage.startswith(COMPILING) and _warm_started:
+        return f"{_warm_stage}, {time.monotonic() - _warm_started:.0f}s"
     return _warm_stage
 
 
@@ -218,10 +224,18 @@ def warm() -> None:
             return
 
         try:
-            _warm_stage = "compiling city index"
+            global _warm_started
+            _warm_started = started = time.monotonic()
+
+            def phase(name: str) -> None:
+                global _warm_stage
+                _warm_stage = f"{COMPILING}: {name}"
+
+            phase("starting")
             from .place_index import build
 
-            build(_writable_index_path())
+            build(_writable_index_path(), progress=phase)
+            log.info("compiled the city index in %.1fs", time.monotonic() - started)
             if _database() is not None:
                 # Release the in-memory index if a request built one before the
                 # compile finished. It is 139 MB that nothing reads from now.
@@ -261,7 +275,7 @@ def _wait_for_compile() -> sqlite3.Connection | None:
     Waiting costs this one request the rest of the compile. Racing cost the
     worker.
     """
-    if _warm_stage != "compiling city index":
+    if not _warm_stage.startswith(COMPILING):
         return None
     _warm_finished.wait(COMPILE_WAIT_SECONDS)
     return _database()
