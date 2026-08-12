@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from collections import OrderedDict
 
 from flask import Flask, Response, g, jsonify, render_template, request
@@ -541,8 +542,35 @@ def api_config():
 entitlements.init()
 
 
+def _warm_datasets() -> None:
+    """Build the city index and timezone dataset before a user needs them.
+
+    This used to sit under `if __name__ == "__main__"`, which gunicorn never
+    executes -- so in production the 34k-city index was built lazily inside
+    whichever request happened to arrive first, taking ~8s and 130 MB while the
+    visitor was mid-keystroke.
+
+    Runs on a background thread so the worker binds its port immediately and
+    Render's health check passes straight away. Any request that lands during
+    the build simply waits on the same lock rather than starting a second one.
+    """
+    def build():
+        try:
+            started = dt.datetime.now()
+            places.warm()
+            log.info(
+                "warmed city index and timezone data in %.1fs",
+                (dt.datetime.now() - started).total_seconds(),
+            )
+        except Exception:  # noqa: BLE001 - never take the worker down for this
+            log.exception("dataset warm-up failed; first request will build them")
+
+    threading.Thread(target=build, name="warm-datasets", daemon=True).start()
+
+
+_warm_datasets()
+
+
 if __name__ == "__main__":
-    # Warm the city index at boot so the first search isn't slow.
-    places.search("London", 1)
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=bool(os.environ.get("ASTRO_DEBUG")))

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import functools
+import threading
 import unicodedata
 from dataclasses import dataclass, asdict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -54,13 +55,51 @@ def _normalize(text: str) -> str:
     return stripped.casefold().strip()
 
 
-@functools.lru_cache(maxsize=1)
+# Both datasets are expensive to build and must be built exactly once.
+#
+# functools.lru_cache was not enough: it only guards the cache dict, not the
+# function body, so concurrent threads each run the build and keep their own
+# copy. On a cold gunicorn worker -- which is every Render cold start, since
+# the warm-up used to live under `if __name__ == "__main__"` and gunicorn never
+# runs that -- four overlapping first requests built the 34k-city index four
+# times and peaked at 544 MB against a 512 MB instance. The worker was
+# OOM-killed, which is what surfaced as a failed city lookup and a 502.
+_index_lock = threading.Lock()
+_index_cache: tuple[list["Place"], dict[str, list[int]]] | None = None
+
+_tf_lock = threading.Lock()
+_tf_cache: TimezoneFinder | None = None
+
+
 def _timezone_finder() -> TimezoneFinder:
-    return TimezoneFinder()
+    global _tf_cache
+    if _tf_cache is None:
+        with _tf_lock:
+            if _tf_cache is None:
+                _tf_cache = TimezoneFinder()
+    return _tf_cache
 
 
-@functools.lru_cache(maxsize=1)
 def _index() -> tuple[list[Place], dict[str, list[int]]]:
+    """The city index, built once however many callers arrive at once."""
+    global _index_cache
+    if _index_cache is None:
+        with _index_lock:
+            if _index_cache is None:
+                _index_cache = _build_index()
+    return _index_cache
+
+
+def warm() -> None:
+    """Build both datasets ahead of the first request.
+
+    Called at import so it happens under gunicorn too, not just `python app.py`.
+    """
+    _index()
+    _timezone_finder()
+
+
+def _build_index() -> tuple[list[Place], dict[str, list[int]]]:
     """Build the searchable city index once, on first use."""
     cache = geonamescache.GeonamesCache()
     countries = {
