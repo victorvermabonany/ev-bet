@@ -1119,19 +1119,51 @@
   // ---------- starfield ----------
 
   /* Generated rather than shipped as an image: no asset to load, it scales to
-     any viewport, and it is the sky the charts are actually calculated from. */
+     any viewport, and it is the sky the charts are actually calculated from.
+
+     Three things make it cheap enough to leave running:
+
+     - The still field is rendered once to an offscreen canvas and blitted each
+       frame, so a few hundred arcs are drawn at build time rather than 60
+       times a second. Only the handful of stars currently flaring get redrawn.
+     - Frames are skipped entirely when nothing is animating, which is most of
+       the time between flares.
+     - The loop stops when the hero scrolls out of view or the tab is hidden.
+
+     Colour is the thread back to the reading page: that layer draws navy dots
+     with occasional gold sparkles on cream. Navy would be invisible against
+     this sky, so the gold carries across instead -- a third of the stars here
+     are struck in it, and the shooting star is gold throughout. */
   function startStarfield() {
     const canvas = $("starfield");
     if (!canvas) return;
     const context = canvas.getContext("2d");
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const WARM = "253, 248, 238";   // the warm white the hero type uses
+    const GOLD = "201, 162, 75";    // --gold, shared with the reading layer
+
     let stars = [];
+    let base = null;                // offscreen canvas: the field at rest
     let frame = null;
+    let shooting = null;
+    let nextShot = 0;
+    let size = { width: 0, height: 0 };
+
+    function scheduleFlare(star, now) {
+      /* Staggered per star rather than a shared clock. A single sine across
+         the field reads as one uniform shimmer; this reads as the occasional
+         star catching light. */
+      star.flareAt = now + 2600 + Math.random() * 14000;
+      star.flareFor = 900 + Math.random() * 1100;
+    }
 
     function build() {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const { width, height } = canvas.getBoundingClientRect();
       if (!width || !height) return;
+      size = { width, height };
+
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -1139,48 +1171,204 @@
       // Denser toward the top: the sky fades into the warm horizon below, so
       // stars there would fight the glow.
       const count = Math.round((width * height) / 5200);
+      const now = performance.now();
+
+      /* Where the hero copy sits, in canvas coordinates. Stars inside it are
+         dimmed and never flare: a bright twinkle directly behind a headline is
+         noise competing with the one thing the page needs read. The field
+         still runs through the zone, so there is no visible hole in the sky --
+         it just goes quiet where the words are. */
+      const skyBox = canvas.getBoundingClientRect();
+      const quiet = [".badge", ".sky-headline", ".sky-sub", ".hero-cta", ".sky-now"]
+        .map((sel) => document.querySelector(sel))
+        .filter(Boolean)
+        .map((node) => {
+          const box = node.getBoundingClientRect();
+          return {
+            left: box.left - skyBox.left - 14,
+            right: box.right - skyBox.left + 14,
+            top: box.top - skyBox.top - 10,
+            bottom: box.bottom - skyBox.top + 10,
+          };
+        });
+
+      const inQuietZone = (x, y) =>
+        quiet.some((z) => x >= z.left && x <= z.right && y >= z.top && y <= z.bottom);
+
       stars = Array.from({ length: count }, () => {
         const depth = Math.pow(Math.random(), 1.7);
-        return {
-          x: Math.random() * width,
-          y: depth * height * 0.92,
+        const y = depth * height * 0.92;
+        const x = Math.random() * width;
+        const behindText = inQuietZone(x, y);
+        const star = {
+          x,
+          y,
           r: 0.35 + Math.random() * 1.15,
-          base: 0.16 + Math.random() * 0.5,
-          phase: Math.random() * Math.PI * 2,
-          speed: 0.4 + Math.random() * 0.9,
+          base: (0.16 + Math.random() * 0.5) * (behindText ? 0.3 : 1),
+          tint: Math.random() < 0.34 ? GOLD : WARM,
+          // Fade toward the horizon glow, precomputed rather than per frame.
+          fade: 1 - Math.min(1, Math.max(0, (y / height - 0.55) / 0.45)),
+          flareAt: Infinity,
+          flareFor: 0,
         };
+        // Only some stars ever twinkle, and never the ones behind the copy. A
+        // field where everything pulses reads as noise rather than as sky.
+        if (!behindText && Math.random() < 0.38) scheduleFlare(star, now);
+        return star;
       });
+
+      base = document.createElement("canvas");
+      base.width = canvas.width;
+      base.height = canvas.height;
+      const bc = base.getContext("2d");
+      bc.setTransform(ratio, 0, 0, ratio, 0, 0);
+      for (const star of stars) {
+        bc.globalAlpha = star.base * star.fade;
+        bc.fillStyle = `rgb(${star.tint})`;
+        bc.beginPath();
+        bc.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        bc.fill();
+      }
+      bc.globalAlpha = 1;
+
+      nextShot = now + 8000 + Math.random() * 20000;
     }
 
-    function draw(time) {
-      const { width, height } = canvas.getBoundingClientRect();
-      context.clearRect(0, 0, width, height);
-      for (const star of stars) {
-        // Fade stars out as they approach the horizon glow.
-        const fade = 1 - Math.min(1, Math.max(0, (star.y / height - 0.55) / 0.45));
-        const twinkle = still ? 1 : 0.72 + 0.28 * Math.sin(time / 1400 * star.speed + star.phase);
-        context.globalAlpha = star.base * twinkle * fade;
-        context.fillStyle = "#fdf8ee";
-        context.beginPath();
-        context.arc(star.x, star.y, star.r, 0, Math.PI * 2);
-        context.fill();
-      }
+    function launchShot(now) {
+      /* Confined to the upper band so a streak never crosses the headline, and
+         angled the way a real one does -- shallow, downward, left or right. */
+      const fromLeft = Math.random() < 0.5;
+      const angle = (Math.random() * 18 + 14) * (Math.PI / 180);
+      const length = 150 + Math.random() * 200;
+      shooting = {
+        x: fromLeft ? -60 : size.width + 60,
+        // Kept in the upper band, clear of the badge and headline below it.
+        y: size.height * (0.05 + Math.random() * 0.17),
+        dx: (fromLeft ? 1 : -1) * Math.cos(angle),
+        dy: Math.sin(angle),
+        length,
+        distance: size.width * (0.34 + Math.random() * 0.3),
+        travelled: 0,
+        speed: 0.62 + Math.random() * 0.3,   // px per ms
+        started: now,
+      };
+    }
+
+    function drawShot(now, elapsed) {
+      shooting.travelled += shooting.speed * elapsed;
+      const progress = shooting.travelled / shooting.distance;
+      if (progress >= 1) { shooting = null; return; }
+
+      // In and out, so it never pops on or off.
+      const alpha = Math.sin(Math.min(1, progress) * Math.PI) * 0.85;
+      const hx = shooting.x + shooting.dx * shooting.travelled;
+      const hy = shooting.y + shooting.dy * shooting.travelled;
+      const tx = hx - shooting.dx * shooting.length;
+      const ty = hy - shooting.dy * shooting.length;
+
+      const gradient = context.createLinearGradient(tx, ty, hx, hy);
+      gradient.addColorStop(0, `rgba(${GOLD}, 0)`);
+      gradient.addColorStop(1, `rgba(${GOLD}, ${alpha})`);
+      context.strokeStyle = gradient;
+      context.lineWidth = 1.5;
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(tx, ty);
+      context.lineTo(hx, hy);
+      context.stroke();
+
+      context.globalAlpha = alpha;
+      context.fillStyle = `rgb(${GOLD})`;
+      context.beginPath();
+      context.arc(hx, hy, 1.5, 0, Math.PI * 2);
+      context.fill();
       context.globalAlpha = 1;
-      if (!still) frame = requestAnimationFrame(draw);
+    }
+
+    let last = 0;
+    function draw(now) {
+      const elapsed = last ? Math.min(now - last, 64) : 16;
+      last = now;
+
+      if (now >= nextShot && !shooting) {
+        launchShot(now);
+        // 30-60s, randomized, so it never settles into a countable rhythm.
+        nextShot = now + 30000 + Math.random() * 30000;
+      }
+
+      // Which stars are mid-flare this frame?
+      const flaring = [];
+      for (const star of stars) {
+        if (now < star.flareAt) continue;
+        const into = now - star.flareAt;
+        if (into > star.flareFor) { scheduleFlare(star, now); continue; }
+        flaring.push([star, Math.sin((into / star.flareFor) * Math.PI)]);
+      }
+
+      // Nothing moving: skip the frame entirely rather than repaint the field.
+      if (flaring.length || shooting) {
+        context.clearRect(0, 0, size.width, size.height);
+        context.drawImage(base, 0, 0, size.width, size.height);
+
+        for (const [star, amount] of flaring) {
+          // Draw only the *extra* light, on top of the resting field.
+          context.globalAlpha = Math.min(0.85, star.base * star.fade * amount * 1.5);
+          context.fillStyle = `rgb(${star.tint})`;
+          context.beginPath();
+          context.arc(star.x, star.y, star.r + amount * 0.5, 0, Math.PI * 2);
+          context.fill();
+        }
+        context.globalAlpha = 1;
+
+        if (shooting) drawShot(now, elapsed);
+      }
+
+      frame = requestAnimationFrame(draw);
+    }
+
+    function paintStill() {
+      context.clearRect(0, 0, size.width, size.height);
+      context.drawImage(base, 0, 0, size.width, size.height);
     }
 
     function restart() {
       build();
+      if (!base) return;
       if (frame) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(draw);
+      last = 0;
+      /* Always paint the resting field once. The loop skips frames when
+         nothing is flaring, which is the point -- but that means it never
+         paints anything on its own, and the sky stayed blank until the first
+         star happened to flare, up to sixteen seconds after load. */
+      paintStill();
+      if (!still) frame = requestAnimationFrame(draw);
     }
 
     restart();
+
+    /* Rebuild once the display face has swapped in. The quiet zone is measured
+       from the headline's box, and Fraunces loads with font-display: swap --
+       so the first measurement is of fallback-font text, a different size and
+       shape, and stars end up flaring behind the real headline. */
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => requestAnimationFrame(restart));
+    }
+
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(restart, 180);
     });
+
+    /* Stop when the hero is off screen. Scrolling to the form used to leave a
+       full-rate animation running behind the rest of the page. */
+    if ("IntersectionObserver" in window && !still) {
+      new IntersectionObserver((entries) => {
+        const visible = entries[0].isIntersecting;
+        if (visible && !frame) { last = 0; frame = requestAnimationFrame(draw); }
+        else if (!visible && frame) { cancelAnimationFrame(frame); frame = null; }
+      }, { threshold: 0 }).observe(canvas);
+    }
 
     // Don't burn frames on a canvas nobody is looking at.
     document.addEventListener("visibilitychange", () => {
