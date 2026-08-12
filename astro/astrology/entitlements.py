@@ -35,6 +35,11 @@ DB_PATH = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "transit.db"),
 )
 
+# Deliberately still `transit_sid` after the rename to Northstar. The cookie is
+# the bearer token for paid access, so renaming it would sign out every existing
+# subscriber and strand their membership behind a claim flow. It is not visible
+# in any copy -- only in devtools -- so the cost of changing it is real and the
+# benefit is cosmetic. Same reasoning for the transit.db filename above.
 COOKIE_NAME = "transit_sid"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months
 

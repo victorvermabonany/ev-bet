@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creates the Transit product and its two pricing plans on Whop.
+# Creates the Northstar product and its two pricing plans on Whop.
 #
 #   $7.99 / week with a 3-day free trial  -> the default, highlighted option
 #   $89 / year                            -> shown, not emphasised
@@ -12,6 +12,19 @@
 # It prints the two plan IDs as environment variables to hand to the app. The
 # script is safe to re-run: pass an existing product with PRODUCT_ID=prod_xxx
 # and it will attach plans to that instead of creating a second product.
+#
+# ALREADY CREATED IT UNDER THE OLD NAME?
+#
+# This script only ever creates, so re-running it will not rename anything. A
+# product that already exists is renamed in place with one command -- no need to
+# touch the Whop dashboard:
+#
+#   whop products update prod_xxx --title "Northstar — full career reading"
+#
+# The product id, plan ids and every existing membership survive that, so
+# subscribers are unaffected. Check it landed with:
+#
+#   whop products get prod_xxx --filter-output title
 set -eu
 
 command -v whop >/dev/null 2>&1 || {
@@ -37,7 +50,7 @@ else
 	echo "Creating product…"
 	product_id="$(
 		whop products create \
-			--title "Transit — full career reading" \
+			--title "Northstar — full career reading" \
 			--headline "Your chart, decoded. Timing you can act on." \
 			--description "The complete transit calendar for the next 18 months, your Saturn return window, deeper friction analysis, and the ability to ask about a specific career decision." \
 			--visibility visible \

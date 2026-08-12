@@ -374,7 +374,15 @@ PAYLOAD = {
 def test_index_renders(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert b"transit" in response.data.lower()
+    body = response.data.lower()
+
+    # The wordmark, the title and the footer all carry the product name, so a
+    # rename that misses any of them fails here rather than in a screenshot.
+    assert body.count(b"northstar") >= 3
+    assert b"<title>northstar" in body
+
+    # "transit" survives only as the astrology term, never as the product name.
+    assert b">transit<" not in body, "the wordmark still says the old name"
 
 
 def test_health_and_config(client):

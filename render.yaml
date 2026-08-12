@@ -1,4 +1,4 @@
-# Render blueprint for the Transit career-astrology app (astro/).
+# Render blueprint for the Northstar career-astrology app (astro/).
 #
 # This does NOT touch the existing ev-bet service. That service was created
 # manually in the Render dashboard and keeps using the root Procfile; a
@@ -12,7 +12,7 @@
 
 services:
   - type: web
-    name: transit-astro
+    name: northstar-astro
     runtime: python
     plan: free
     branch: claude/career-astrology-app-sgt5t7
@@ -64,6 +64,6 @@ services:
     # managed Postgres.
     #
     # disk:
-    #   name: transit-data
+    #   name: northstar-data
     #   mountPath: /var/data
     #   sizeGB: 1

@@ -1,4 +1,4 @@
-# Transit — know when to move
+# Northstar — know when to move
 
 **Your chart. Your timing. Real data, not vibes.**
 

@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#f7f1e8"/>
-  <circle cx="16" cy="17" r="10" fill="none" stroke="#1f2a44" stroke-width="1.7"/>
-  <line x1="6" y1="17" x2="26" y2="17" stroke="#1f2a44" stroke-width="1.5" opacity="0.75"/>
-  <circle cx="16" cy="7" r="3.6" fill="#c1592b"/>
+  <!-- The favicon carries one idea, not the whole logo. The wheel-and-horizon
+       mark is legible on the page at 30px and up, but at a 16px browser tab it
+       collapses into a smudge, so the tab gets the star alone at full size. -->
+  <rect width="32" height="32" rx="7" fill="#1f2a44"/>
+  <path d="M16 4 L19.2 12.8 L28 16 L19.2 19.2 L16 28 L12.8 19.2 L4 16 L12.8 12.8 Z"
+        fill="#e8a24b"/>
 </svg>

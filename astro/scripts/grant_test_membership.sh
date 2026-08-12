@@ -20,9 +20,9 @@
 #
 # Examples:
 #   WHOP_WEBHOOK_SECRET=... sh scripts/grant_test_membership.sh \
-#       https://transit-astro.onrender.com AbC123...
+#       https://northstar-astro.onrender.com AbC123...
 #   WHOP_WEBHOOK_SECRET=... sh scripts/grant_test_membership.sh \
-#       https://transit-astro.onrender.com AbC123... revoke
+#       https://northstar-astro.onrender.com AbC123... revoke
 #
 set -eu
 
