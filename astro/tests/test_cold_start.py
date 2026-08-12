@@ -171,6 +171,60 @@ def test_both_lookup_paths_agree(prebuilt, monkeypatch, tmp_path):
         assert from_db[query] == from_memory[query], query
 
 
+def test_the_index_is_never_visible_half_built(cold):
+    """The app serves requests while the index compiles.
+
+    Building straight into INDEX_PATH left a file at the destination that was
+    not yet an index for the whole compile, and _database() opens whatever it
+    finds there. Early on it saw an empty `meta` table, logged "built with a
+    different normalizer" and sent that request into the 139 MB in-memory
+    build -- the exact allocation that OOM-killed the worker. Later it cached a
+    connection to a database holding every row but none of its indexes, with a
+    VACUUM still to rewrite the file underneath it.
+    """
+    from astrology import place_index
+
+    seen_unusable = []
+    opened = []
+
+    def watch():
+        for _ in range(2000):
+            present = os.path.exists(places.INDEX_PATH)
+            conn = places._database()
+            if conn is not None:
+                indexes = {
+                    r[0] for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'index'"
+                    )
+                }
+                opened.append(indexes)
+                return
+            if present:
+                seen_unusable.append(1)
+            time.sleep(0.005)
+
+    watcher = threading.Thread(target=watch)
+    watcher.start()
+    place_index.build(places.INDEX_PATH)
+    watcher.join(timeout=15)
+
+    assert not seen_unusable, (
+        f"{len(seen_unusable)} samples saw a file at INDEX_PATH that could not "
+        f"be opened -- each one is a request falling into the in-memory build"
+    )
+    if opened:
+        assert "names_key" in opened[0], (
+            "opened the index before it was indexed; every lookup would be a "
+            "full table scan"
+        )
+    # And no staging file is left lying around.
+    leftovers = [
+        f for f in os.listdir(os.path.dirname(places.INDEX_PATH))
+        if f != os.path.basename(places.INDEX_PATH)
+    ]
+    assert not leftovers, f"build left {leftovers} behind"
+
+
 def test_a_second_search_does_not_rebuild(cold, monkeypatch):
     """Whichever path is in use, the expensive work happens once."""
     builds = []

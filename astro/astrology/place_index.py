@@ -63,10 +63,39 @@ CREATE INDEX places_pop ON places (population DESC);
 
 
 def build(path: str = INDEX_PATH) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    if os.path.exists(path):
-        os.remove(path)
+    """Compile the index and put it at ``path`` in one step.
 
+    The compile writes to a sibling temporary file and renames it into place,
+    because the app is serving requests while this runs. Building directly into
+    ``path`` meant that for the whole of the compile there was a file at the
+    destination that was not yet an index, and _database() opens whatever it
+    finds there: early on it saw the empty `meta` table and logged "built with a
+    different normalizer" -- sending that request into the 139 MB in-memory
+    build, which is the exact thing this module exists to avoid -- and later it
+    cached a connection to a database that had every row but none of its
+    indexes, with a VACUUM still to rewrite the file underneath it.
+
+    os.replace is atomic on POSIX, so a concurrent _database() now sees either
+    no file at all or a finished one.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    staging = f"{path}.building.{os.getpid()}"
+    for stale in (staging,):
+        if os.path.exists(stale):
+            os.remove(stale)
+
+    try:
+        _compile(staging)
+        os.replace(staging, path)
+    finally:
+        if os.path.exists(staging):
+            os.remove(staging)
+
+    size = os.path.getsize(path) / (1024 * 1024)
+    print(f"built {path}: {size:.1f} MB")
+
+
+def _compile(path: str) -> None:
     cache = geonamescache.GeonamesCache()
     countries = {code: info["name"] for code, info in cache.get_countries().items()}
     us_states = {code: info["name"] for code, info in cache.get_us_states().items()}
@@ -137,8 +166,7 @@ def build(path: str = INDEX_PATH) -> None:
     conn.execute("VACUUM")
     conn.close()
 
-    size = os.path.getsize(path) / (1024 * 1024)
-    print(f"built {path}: {total_places:,} places, {total_names:,} names, {size:.1f} MB")
+    print(f"  compiled {total_places:,} places, {total_names:,} names")
 
 
 
