@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import functools
+import logging
 import os
 import sqlite3
 import threading
@@ -24,6 +25,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import geonamescache
 from timezonefinder import TimezoneFinder
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,9 +116,35 @@ def _database() -> sqlite3.Connection | None:
             return None
         with _db_lock:
             if _db is None:
-                _db = sqlite3.connect(INDEX_PATH, check_same_thread=False)
-                _db.row_factory = sqlite3.Row
+                conn = sqlite3.connect(INDEX_PATH, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                if not _normalizer_matches(conn):
+                    # The file was built by a different _normalize, so its keys
+                    # no longer correspond to what a query produces. Nothing is
+                    # corrupt; it just cannot answer. Fall back rather than
+                    # return silent misses.
+                    log.warning(
+                        "%s was built with a different normalizer; ignoring it "
+                        "and building the index in memory. Re-run "
+                        "scripts/build_place_index.py.", INDEX_PATH,
+                    )
+                    conn.close()
+                    return None
+                _db = conn
     return _db
+
+
+# Kept in step with scripts/build_place_index.py.
+_FINGERPRINT_SAMPLES = ("São Paulo", "MÜNCHEN", "  Saint-Louis  ", "NYC", "Ōsaka")
+
+
+def _normalizer_matches(conn: sqlite3.Connection) -> bool:
+    expected = "|".join(_normalize(s) for s in _FINGERPRINT_SAMPLES)
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'normalizer'").fetchone()
+    except sqlite3.Error:
+        return False
+    return bool(row) and row["value"] == expected
 
 
 def _place_from_row(row) -> Place:

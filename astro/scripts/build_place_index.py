@@ -62,7 +62,19 @@ CREATE TABLE names (
     place_id INTEGER NOT NULL,
     primary_name INTEGER NOT NULL
 );
+
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+
+# The keys in `names` are whatever _normalize produced at build time. If that
+# function changes, every lookup silently stops matching -- the file is not
+# corrupt, it is answering a question nobody is asking any more. Fingerprinting
+# it lets the app notice and fall back instead of returning nothing.
+FINGERPRINT_SAMPLES = ("São Paulo", "MÜNCHEN", "  Saint-Louis  ", "NYC", "Ōsaka")
+
+
+def normalizer_fingerprint(normalize) -> str:
+    return "|".join(normalize(s) for s in FINGERPRINT_SAMPLES)
 
 # Built after the inserts: filling an unindexed table and indexing once is far
 # cheaper than maintaining the B-tree per row.
@@ -122,6 +134,10 @@ def build(path: str = INDEX_PATH) -> None:
 
     conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", places_rows)
     conn.executemany("INSERT INTO names VALUES (?,?,?)", name_rows)
+    conn.execute(
+        "INSERT INTO meta VALUES ('normalizer', ?)",
+        (normalizer_fingerprint(_normalize),),
+    )
     conn.executescript(INDEXES)
     conn.commit()
     conn.execute("VACUUM")

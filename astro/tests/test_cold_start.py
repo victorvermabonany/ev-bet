@@ -183,3 +183,39 @@ def test_warm_up_failure_does_not_take_the_worker_down(monkeypatch, capsys):
     # The app still answers.
     app_module.app.config["TESTING"] = True
     assert app_module.app.test_client().get("/health").status_code == 200
+
+
+def test_a_stale_index_is_ignored_rather_than_answering_wrongly(prebuilt, monkeypatch, tmp_path):
+    """If _normalize changes, the prebuilt keys stop corresponding to queries.
+
+    The file is not corrupt -- it answers a question nobody asks any more, so
+    every lookup would silently miss. It must be rejected, not trusted.
+    """
+    import shutil
+    import sqlite3
+
+    stale = tmp_path / "stale.sqlite"
+    shutil.copy(places.INDEX_PATH, stale)
+    conn = sqlite3.connect(stale)
+    conn.execute("UPDATE meta SET value = 'a-different-normalizer'")
+    conn.commit()
+    conn.close()
+
+    saved_db = places._db
+    try:
+        places._db = None
+        monkeypatch.setattr(places, "INDEX_PATH", str(stale))
+        assert places._database() is None, "stale index must be rejected"
+        # And the app still works, via the in-memory fallback.
+        places._index_cache = None
+        assert places.search("Lisbon", 1)[0].country == "Portugal"
+    finally:
+        places._db = saved_db
+        places._index_cache = None
+
+
+def test_the_committed_index_matches_the_current_normalizer(prebuilt):
+    """Guards against committing code that invalidates the checked-in file."""
+    assert places._database() is not None, (
+        "data/places.sqlite is stale — re-run scripts/build_place_index.py"
+    )
