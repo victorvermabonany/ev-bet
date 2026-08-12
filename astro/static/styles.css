@@ -1552,3 +1552,90 @@ section.block { margin-bottom: 56px; }
   top: auto;
   bottom: calc(100% + 6px);
 }
+
+/* ---- Live sky readout -------------------------------------------------
+   Sits under the hero CTA, on the night sky. Every value is computed at
+   render from the Swiss Ephemeris, which makes this the page's own evidence
+   for the badge above it. Deliberately quiet: it is proof, not a second
+   call to action, so nothing here is a button or competes with the CTA. */
+
+.sky-now {
+  margin: 44px auto 0;
+  max-width: 760px;
+  padding-top: 30px;
+  border-top: 1px solid rgba(233, 224, 210, 0.16);
+  text-align: left;
+}
+
+.sky-now-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 22px 30px;
+}
+
+.sky-fact { display: flex; align-items: flex-start; gap: 11px; }
+
+.sky-fact-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.sky-fact-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8790a3;
+}
+
+.sky-fact-value {
+  font-size: 14.5px;
+  color: #ece6da;
+  line-height: 1.35;
+}
+
+.sky-fact-meta {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #9aa3b4;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glyphs are typography here, not icons: gold, slightly raised optical size,
+   sitting inline with the text they belong to. */
+.sky-glyph {
+  color: var(--gold);
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+.sky-glyph-lead {
+  font-size: 21px;
+  width: 24px;
+  flex-shrink: 0;
+  text-align: center;
+  padding-top: 2px;
+}
+
+/* Retrograde Mercury is the one state worth colouring differently. */
+.sky-glyph-lead.is-rx { color: var(--terracotta); }
+
+.moon-disc { width: 24px; height: 24px; flex-shrink: 0; margin-top: 2px; overflow: visible; }
+/* The rim keeps a new moon legible as a dark disc rather than as nothing. */
+.moon-dark {
+  fill: rgba(255, 255, 255, 0.07);
+  stroke: rgba(240, 217, 168, 0.45);
+  stroke-width: 1.1;
+}
+.moon-lit  { fill: #f0d9a8; }
+
+.sky-now-line {
+  margin: 24px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #a8b0c0;
+  max-width: 68ch;
+}
+
+@media (max-width: 860px) {
+  .sky-now { margin-top: 34px; padding-top: 24px; }
+  .sky-now-row { grid-template-columns: 1fr; gap: 18px; }
+  .sky-now-line { margin-top: 18px; font-size: 13.5px; }
+}

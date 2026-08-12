@@ -73,6 +73,68 @@
       </p>
 
       <button class="btn-primary btn-lg hero-cta">Get your chart</button>
+
+      <!-- Live sky. Every value here is computed from the Swiss Ephemeris at
+           page render, which makes it the page's own evidence for the badge
+           above it: the claim is "real astronomical data", so show some. -->
+      <aside class="sky-now" aria-label="The sky right now">
+        <div class="sky-now-row">
+          <div class="sky-fact">
+            <svg class="moon-disc" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="11.4" class="moon-dark"/>
+              <path d="{{ sky.moon.path }}" class="moon-lit"/>
+            </svg>
+            <span class="sky-fact-body">
+              <span class="sky-fact-label">Moon</span>
+              <span class="sky-fact-value">
+                {{ sky.moon.phase.name }} in {{ sky.moon.sign }}
+                <span class="sky-glyph" aria-hidden="true">{{ sky.moon.signGlyph }}</span>
+              </span>
+              <span class="sky-fact-meta">{{ sky.moon.phase.illuminationPercent }}% lit · {{ sky.moon.display }}</span>
+            </span>
+          </div>
+
+          <div class="sky-fact">
+            <span class="sky-glyph sky-glyph-lead {% if sky.mercury.retrograde %}is-rx{% endif %}"
+                  aria-hidden="true">{{ sky.mercury.glyph }}</span>
+            <span class="sky-fact-body">
+              <span class="sky-fact-label">Mercury</span>
+              <span class="sky-fact-value">
+                {% if sky.mercury.retrograde %}Retrograde{% else %}Direct{% endif %} in {{ sky.mercury.sign }}
+                <span class="sky-glyph" aria-hidden="true">{{ sky.mercury.signGlyph }}</span>
+              </span>
+              <span class="sky-fact-meta">
+                {% if sky.mercury.retrograde and sky.mercury.untilPretty %}
+                  Direct again {{ sky.mercury.untilPretty }}
+                {% elif sky.mercury.nextPretty %}
+                  Next retrograde {{ sky.mercury.nextPretty }}
+                {% else %}
+                  {{ sky.mercury.display }}
+                {% endif %}
+              </span>
+            </span>
+          </div>
+
+          {% if sky.aspect %}
+          <div class="sky-fact">
+            <span class="sky-glyph sky-glyph-lead" aria-hidden="true">{{ sky.aspect.aspectGlyph }}</span>
+            <span class="sky-fact-body">
+              <span class="sky-fact-label">Closest aspect</span>
+              <span class="sky-fact-value">
+                <span class="sky-glyph" aria-hidden="true">{{ sky.aspect.aGlyph }}</span>
+                {{ sky.aspect.a }}
+                {{ sky.aspect.aspect }}
+                <span class="sky-glyph" aria-hidden="true">{{ sky.aspect.bGlyph }}</span>
+                {{ sky.aspect.b }}
+              </span>
+              <span class="sky-fact-meta">{{ sky.aspect.exact }} from exact</span>
+            </span>
+          </div>
+          {% endif %}
+        </div>
+
+        <p class="sky-now-line">{{ sky.headline }}</p>
+      </aside>
     </div>
   </section>
 

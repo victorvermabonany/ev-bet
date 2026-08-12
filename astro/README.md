@@ -174,6 +174,38 @@ reached only by the CTA.
 - **No urgency tactics** — no countdowns, no scarcity. They'd contradict the
   calm, credible register the rest of the product works in.
 
+## The live sky
+
+The hero carries a readout of the actual current sky, computed at page render
+from the same Swiss Ephemeris the charts use — today's Moon phase and sign,
+Mercury's retrograde status, and the closest aspect currently held.
+
+It is there as evidence rather than decoration. The badge above it claims "real
+astronomical data", and the cheapest way to support that claim is to show some
+and let anyone check it against their own ephemeris.
+
+Three decisions worth keeping:
+
+- **The Moon graphic is drawn from the illumination figure**, not chosen from a
+  set of eight phase images. The terminator is an ellipse of semi-minor axis
+  `r·|1−2k|`, so the disc on screen *is* the number. Verified against published
+  new and full moon instants for 2024–2026, where elongation lands on 0° and
+  180° to under a degree.
+- **The reported aspect must involve a body that actually moves.** The tightest
+  aspect in the sky is almost always between two outer planets — Neptune
+  sextile Pluto sits inside a degree for years. Real, but presenting it as what
+  is happening *right now* would leave the line unchanged for months, so at
+  least one body must come from Sun through Jupiter.
+- **Nothing is invented when data is missing.** If no aspect is within orb the
+  line says so, because an unusually quiet sky is itself true and interesting.
+
+`test_sky.py` checks the phase maths against published lunation times and
+Mercury's status against published retrograde periods, and asserts the payload
+contains no social proof of any kind.
+
+Glyphs are pinned to text presentation with U+FE0E. Without it browsers render
+♌ and ♀ as colour emoji, which fights the typography around them.
+
 ## Consistency rules across screens
 
 The landing page's principles are applied to every screen, not just the
@@ -315,6 +347,7 @@ counter it should read from already exists in `astrology/ratelimit.py`.
 | `GET /api/entitlement` | What this session may see — the UI's only source of truth |
 | `POST /api/checkout` | Creates a Whop checkout configuration carrying this session's token |
 | `POST /api/whop/webhook` | Signed membership events from Whop; the only thing that grants access |
+| `GET /api/sky` | Today's sky — the payload the landing page renders from |
 | `GET /health`, `/api/config` | Status |
 
 ## Pricing and checkout (Whop)

@@ -21,7 +21,7 @@ from flask import Flask, Response, g, jsonify, render_template, request
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from astrology import career, dashboard, entitlements, places, ratelimit, reading, whop_api
+from astrology import career, dashboard, entitlements, places, ratelimit, reading, sky, whop_api
 from astrology.chart import BirthData, build_chart
 
 logging.basicConfig(level=logging.INFO)
@@ -276,7 +276,10 @@ def _persist_session(response):
 @app.route("/")
 def index():
     session_id()  # ensure a visitor has a token before they reach checkout
-    return render_template("index.html")
+    # Rendered server-side rather than fetched: the live sky is the first proof
+    # of the page's own claim, so it should be in the HTML on arrival rather
+    # than popping in after a round trip. Cached for ten minutes upstream.
+    return render_template("index.html", sky=sky.cached_snapshot())
 
 
 @app.route("/health")
@@ -515,6 +518,12 @@ def api_claim():
         return jsonify({"error": messages.get(reason, "That didn't work.")}), 404
 
     return jsonify({"claimed": True, "entitlement": entitlements.entitlement(session_id())})
+
+
+@app.route("/api/sky")
+def api_sky():
+    """Today's sky. Same payload the landing page is rendered from."""
+    return jsonify(sky.cached_snapshot())
 
 
 @app.route("/api/config")
