@@ -2,5 +2,4 @@
 *.db
 *.db-journal
 
-# Precomputed at build time by scripts/build_place_index.py
-data/
+# data/places.sqlite is deliberately committed -- see scripts/build_place_index.py

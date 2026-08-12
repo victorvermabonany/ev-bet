@@ -14,12 +14,20 @@ Doing it here moves that work to the build step, where there is headroom and it
 happens once per deploy rather than once per cold start. The worker then opens
 a ~15 MB file and queries it, holding almost nothing in memory.
 
-Run automatically by render.yaml's buildCommand. Safe to run by hand:
+The output is **committed to the repository** rather than generated at deploy
+time. render.yaml does run it in buildCommand, but a blueprint's buildCommand
+only changes after the blueprint is re-synced in the Render dashboard -- and a
+deployment that silently falls back to the in-memory build is exactly the
+outage this is meant to prevent. Committing 10.7 MB makes the deployment
+self-contained: whatever the platform does with the build step, the file is
+there.
+
+Regenerate after upgrading geonamescache, then commit the result:
 
     python scripts/build_place_index.py
 
-If the file is absent at runtime the app falls back to building the index in
-memory, so local development and the test suite work without this step.
+If the file is absent the app falls back to building the index in memory, so a
+checkout without it still works -- just slowly, and at 139 MB.
 """
 
 from __future__ import annotations

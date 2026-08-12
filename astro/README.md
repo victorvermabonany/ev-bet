@@ -295,6 +295,44 @@ Fonts are self-hosted in `static/fonts/` (~330 KB, latin + latin-ext subsets)
 rather than loaded from a CDN. The chart engine already runs offline, and a
 webfont that silently falls back would undo half the identity.
 
+## Why the city index is precomputed
+
+`scripts/build_place_index.py` compiles the 34k-city dataset into a 10.7 MB
+SQLite file during `buildCommand`. The worker opens it and queries it; it
+builds nothing.
+
+This exists because the original design — assembling the index in Python on
+first use — took the live site down. Three things had to be true at once, and
+on Render's free instance they were:
+
+| | before | after |
+|---|---|---|
+| resident memory for the index | 139 MB | ~1 MB |
+| timezone dataset at boot | 41 MB | not loaded |
+| worker RSS under gunicorn | ~180 MB | **52 MB** |
+| readiness after deploy | seconds, sometimes never | **immediate** |
+
+The failure chain: the warm-up lived under `if __name__ == "__main__"`, which
+gunicorn never executes, so the index was built lazily inside whichever request
+arrived first. `functools.lru_cache` guards its dict but not the function body,
+so every concurrent first request built its *own* copy — four overlapping
+requests peaked at 544 MB against a 512 MB instance. The worker was OOM-killed,
+taking its in-flight requests with it, which is what surfaced as "can't reach
+the city list" and a 502 on submit.
+
+The in-memory build is kept as a fallback when the file is absent, so a fresh
+checkout and the test suite need no build step. `test_cold_start.py` asserts
+both paths return identical results — which caught a real defect, since the SQL
+join yields one row per matching *name* and a city with several matching
+aliases came back repeated.
+
+The timezone dataset is no longer loaded at boot at all: it is only consulted
+for raw coordinates with no timezone attached, and every result the picker
+returns already carries its own.
+
+`/health` reports `build` (the deployed commit) and `warmStage`, which is what
+turned "it is hanging" into "it is on the city index".
+
 ## The dashboard
 
 The screen a user lands on once their chart is calculated. The full chart detail
