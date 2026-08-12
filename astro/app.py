@@ -304,7 +304,42 @@ def health():
         "model": reading.MODEL,
         "voice": reading.VOICE,
         "whopConfigured": whop_config()["configured"],
+        **(_warm_diagnosis() if request.args.get("deep") else {}),
     })
+
+
+def _warm_diagnosis() -> dict:
+    """Why the warm-up is where it is, for /health?deep=1.
+
+    The deployed worker sat on one stage for ten minutes where it takes 1.4s
+    locally, and there is no log access from here. Guessing at that from the
+    outside costs a deploy per hypothesis; the thread's own stack answers it in
+    one. Read-only and behind a query flag, so it costs a normal request
+    nothing.
+    """
+    import sys
+    import traceback
+
+    frames = sys._current_frames()
+    stacks = {}
+    for thread in threading.enumerate():
+        frame = frames.get(thread.ident)
+        if frame is None:
+            continue
+        stacks[thread.name] = [
+            f"{os.path.basename(f.filename)}:{f.lineno} {f.name}"
+            for f in traceback.extract_stack(frame)[-6:]
+        ]
+
+    return {
+        "diagnosis": {
+            "indexPath": places.INDEX_PATH,
+            "indexFileExists": os.path.exists(places.INDEX_PATH),
+            "dbOpen": places._db is not None,
+            "memoryIndexBuilt": places._index_cache is not None,
+            "threads": stacks,
+        }
+    }
 
 
 @app.route("/api/places")
