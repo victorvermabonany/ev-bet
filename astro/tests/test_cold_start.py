@@ -23,24 +23,30 @@ from astrology import places  # noqa: E402
 
 
 @pytest.fixture
-def cold(monkeypatch):
+def cold(tmp_path):
     """A worker with nothing built AND no precomputed file.
 
     This is the in-memory fallback path -- what every deployment used to do on
     every cold start, and what a fresh checkout still does before
     scripts/build_place_index.py has run.
+
+    The missing path must be under tmp_path, never a made-up absolute one:
+    warm() creates the parent directory of INDEX_PATH before compiling, so a
+    run as root (which is how the suite runs in CI and in the container) turned
+    "/nonexistent/places.sqlite" into a real 11 MB file at the filesystem root.
+    From then on os.path.exists() was true, _database() handed back a live
+    connection, and every test in this file silently stopped exercising the
+    fallback it exists to cover.
     """
-    saved_index, saved_tf, saved_db = (
-        places._index_cache, places._tf_cache, places._db
-    )
+    saved = (places._index_cache, places._tf_cache, places._db, places.INDEX_PATH)
     places._index_cache = None
     places._tf_cache = None
     places._db = None
-    monkeypatch.setattr(places, "INDEX_PATH", "/nonexistent/places.sqlite")
+    places.INDEX_PATH = str(tmp_path / "absent" / "places.sqlite")
+    assert not os.path.exists(places.INDEX_PATH)
     yield
-    places._index_cache, places._tf_cache, places._db = (
-        saved_index, saved_tf, saved_db
-    )
+    (places._index_cache, places._tf_cache,
+     places._db, places.INDEX_PATH) = saved
 
 
 @pytest.fixture
@@ -103,11 +109,36 @@ def test_timezone_finder_is_built_once(cold, monkeypatch):
     assert len(builds) == 1
 
 
-def test_warm_builds_the_index_when_there_is_no_precomputed_file(cold):
+def test_warm_compiles_the_index_when_the_file_is_missing(cold):
+    """A missing file is compiled, not worked around in memory.
+
+    Compiling costs ~110 MB once and leaves the worker holding about a
+    megabyte. The in-memory index costs 139 MB for the life of the process,
+    which is what exhausted the deployed instance.
+    """
     assert places._index_cache is None
+
     places.warm()
-    assert places._index_cache is not None
+
     assert places.warm_stage() == "ready"
+    assert places._database() is not None, "should be serving from the compiled file"
+    assert places._index_cache is None, "should not have fallen back to memory"
+    assert places.search("Lisbon", 1)[0].country == "Portugal"
+
+
+def test_warm_falls_back_to_memory_if_compiling_fails(cold, monkeypatch):
+    """Compiling is an optimisation; failing it must not take the app down."""
+    import astrology.place_index as place_index
+
+    def explode(path):
+        raise RuntimeError("simulated compile failure")
+
+    monkeypatch.setattr(place_index, "build", explode)
+
+    places.warm()
+
+    assert places.warm_stage() == "ready"
+    assert places._index_cache is not None, "should have built in memory instead"
     assert places.search("Lisbon", 1)[0].country == "Portugal"
 
 
@@ -122,7 +153,7 @@ def test_warm_is_instant_when_the_index_was_precomputed(prebuilt):
     assert places._index_cache is None
 
 
-def test_both_lookup_paths_agree(prebuilt, monkeypatch):
+def test_both_lookup_paths_agree(prebuilt, monkeypatch, tmp_path):
     """The fallback must not quietly return different cities to the real path."""
     queries = ["New York", "NYC", "San Fr", "Bombay", "Dubl", "Austin, TX", "Lisb"]
     from_db = {q: [p.label for p in places.search(q, 5)] for q in queries}
@@ -131,7 +162,7 @@ def test_both_lookup_paths_agree(prebuilt, monkeypatch):
     try:
         places._db = None
         places._index_cache = None
-        monkeypatch.setattr(places, "INDEX_PATH", "/nonexistent/places.sqlite")
+        monkeypatch.setattr(places, "INDEX_PATH", str(tmp_path / "absent.sqlite"))
         from_memory = {q: [p.label for p in places.search(q, 5)] for q in queries}
     finally:
         places._db, places._index_cache = saved_db, saved_index
@@ -141,15 +172,22 @@ def test_both_lookup_paths_agree(prebuilt, monkeypatch):
 
 
 def test_a_second_search_does_not_rebuild(cold, monkeypatch):
+    """Whichever path is in use, the expensive work happens once."""
     builds = []
     original = places._build_index
     monkeypatch.setattr(places, "_build_index",
                         lambda: (builds.append(1), original())[1])
 
+    compiles = []
+    import astrology.place_index as place_index
+    real_build = place_index.build
+    monkeypatch.setattr(place_index, "build",
+                        lambda path: (compiles.append(1), real_build(path))[1])
+
     places.search("Oslo", 1)
     places.search("Madrid", 1)
     places.search("Cairo", 1)
-    assert len(builds) == 1
+    assert len(builds) + len(compiles) == 1, f"{len(builds)} memory, {len(compiles)} compiles"
 
 
 def test_the_app_warms_datasets_without_being_run_as_main():

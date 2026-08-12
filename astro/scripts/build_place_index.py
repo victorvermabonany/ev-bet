@@ -1,167 +1,20 @@
-"""Precompute the city index into SQLite, at build time.
+"""Regenerate the city index by hand.
 
-Why this exists
----------------
+The app builds this automatically at boot when the file is missing, so this is
+only needed to inspect the output or to pre-seed the file:
 
-The index used to be built in the worker on first use: 34k cities and ~190k
-searchable names assembled into Python dicts. That costs about 139 MB of
-resident memory and a second or two of CPU on a fast machine. On Render's free
-instance -- 512 MB and a fraction of a core, shared with everything else the
-process is doing -- it was enough to stop the worker from ever finishing the
-build, which is what surfaced as a dead city lookup and a 502.
-
-Doing it here moves that work to the build step, where there is headroom and it
-happens once per deploy rather than once per cold start. The worker then opens
-a ~15 MB file and queries it, holding almost nothing in memory.
-
-The output is **committed to the repository** rather than generated at deploy
-time. render.yaml does run it in buildCommand, but a blueprint's buildCommand
-only changes after the blueprint is re-synced in the Render dashboard -- and a
-deployment that silently falls back to the in-memory build is exactly the
-outage this is meant to prevent. Committing 10.7 MB makes the deployment
-self-contained: whatever the platform does with the build step, the file is
-there.
-
-Regenerate after upgrading geonamescache, then commit the result:
-
-    python scripts/build_place_index.py
-
-If the file is absent the app falls back to building the index in memory, so a
-checkout without it still works -- just slowly, and at 139 MB.
+    python scripts/build_place_index.py [path]
 """
 
 from __future__ import annotations
 
 import os
-import sqlite3
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import geonamescache  # noqa: E402
-
-from astrology.places import INDEX_PATH, _normalize  # noqa: E402
-
-SCHEMA = """
-PRAGMA journal_mode = OFF;
-PRAGMA synchronous = OFF;
-
-CREATE TABLE places (
-    id        INTEGER PRIMARY KEY,
-    name      TEXT NOT NULL,
-    country   TEXT NOT NULL,
-    admin     TEXT NOT NULL,
-    latitude  REAL NOT NULL,
-    longitude REAL NOT NULL,
-    timezone  TEXT NOT NULL,
-    population INTEGER NOT NULL
-);
-
-CREATE TABLE names (
-    key      TEXT NOT NULL,
-    place_id INTEGER NOT NULL,
-    primary_name INTEGER NOT NULL
-);
-
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-"""
-
-# The keys in `names` are whatever _normalize produced at build time. If that
-# function changes, every lookup silently stops matching -- the file is not
-# corrupt, it is answering a question nobody is asking any more. Fingerprinting
-# it lets the app notice and fall back instead of returning nothing.
-FINGERPRINT_SAMPLES = ("São Paulo", "MÜNCHEN", "  Saint-Louis  ", "NYC", "Ōsaka")
-
-
-def normalizer_fingerprint(normalize) -> str:
-    return "|".join(normalize(s) for s in FINGERPRINT_SAMPLES)
-
-# Built after the inserts: filling an unindexed table and indexing once is far
-# cheaper than maintaining the B-tree per row.
-INDEXES = """
-CREATE INDEX names_key ON names (key, place_id);
-CREATE INDEX places_pop ON places (population DESC);
-"""
-
-
-def build(path: str = INDEX_PATH) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    if os.path.exists(path):
-        os.remove(path)
-
-    cache = geonamescache.GeonamesCache()
-    countries = {code: info["name"] for code, info in cache.get_countries().items()}
-    us_states = {code: info["name"] for code, info in cache.get_us_states().items()}
-
-    conn = sqlite3.connect(path)
-    conn.executescript(SCHEMA)
-
-    # Streamed in batches rather than accumulated: holding 34k place tuples and
-    # ~196k name tuples alongside the source dataset roughly doubled peak
-    # memory, for no benefit.
-    places_rows = []
-    name_rows = []
-    total_places = 0
-    total_names = 0
-
-    def flush(force=False):
-        nonlocal total_places, total_names
-        if force or len(name_rows) > 20000:
-            conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", places_rows)
-            conn.executemany("INSERT INTO names VALUES (?,?,?)", name_rows)
-            total_places += len(places_rows)
-            total_names += len(name_rows)
-            places_rows.clear()
-            name_rows.clear()
-
-    for index, record in enumerate(cache.get_cities().values()):
-        country_code = record.get("countrycode", "")
-        admin = us_states.get(record.get("admin1code", ""), "") if country_code == "US" else ""
-
-        name = record["name"]
-        places_rows.append((
-            index,
-            name,
-            countries.get(country_code, country_code),
-            admin,
-            float(record["latitude"]),
-            float(record["longitude"]),
-            record.get("timezone", "") or "",
-            int(record.get("population", 0) or 0),
-        ))
-
-        seen = set()
-        primary = _normalize(name)
-        name_rows.append((primary, index, 1))
-        seen.add(primary)
-
-        # ASCII aliases only. The dataset carries every transliteration a place
-        # has ever had -- Cyrillic, Han, Arabic -- and indexing those matches
-        # spellings nobody types into an English form. Accented spellings still
-        # resolve because _normalize strips accents.
-        for alias in record.get("alternatenames") or ():
-            if not alias or not alias.isascii() or not 2 <= len(alias) <= 40:
-                continue
-            key = _normalize(alias)
-            if key and key not in seen:
-                name_rows.append((key, index, 0))
-                seen.add(key)
-
-        flush()
-
-    flush(force=True)
-    conn.execute(
-        "INSERT INTO meta VALUES ('normalizer', ?)",
-        (normalizer_fingerprint(_normalize),),
-    )
-    conn.executescript(INDEXES)
-    conn.commit()
-    conn.execute("VACUUM")
-    conn.close()
-
-    size = os.path.getsize(path) / (1024 * 1024)
-    print(f"built {path}: {total_places:,} places, {total_names:,} names, {size:.1f} MB")
-
+from astrology.place_index import build  # noqa: E402
+from astrology.places import INDEX_PATH  # noqa: E402
 
 if __name__ == "__main__":
     build(sys.argv[1] if len(sys.argv) > 1 else INDEX_PATH)

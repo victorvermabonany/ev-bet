@@ -98,7 +98,7 @@ def _index() -> tuple[list[Place], dict[str, list[int]]]:
 # Where the precomputed index lives. Built by scripts/build_place_index.py at
 # deploy time; absent in a fresh checkout, in which case the in-memory build
 # below takes over so local development and the tests need no build step.
-INDEX_PATH = os.path.join(
+INDEX_PATH = os.environ.get("ASTRO_INDEX_PATH") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "places.sqlite"
 )
 
@@ -201,21 +201,57 @@ def warm_stage() -> str:
 def warm() -> None:
     """Make the first request cheap.
 
-    With the precomputed file this is just opening SQLite -- instant, and a
-    megabyte. Without it we fall back to assembling the index in memory, which
-    is what this used to do on every deployment.
+    Opens the compiled index if it is already there, compiles it if not, and
+    only falls back to the in-memory build if compiling fails. Compiling costs
+    ~110 MB once and leaves the worker holding about a megabyte; the in-memory
+    index costs 139 MB for as long as the process lives.
 
     The timezone dataset is deliberately *not* warmed: it costs ~41 MB and is
     only consulted for raw coordinates with no timezone attached, which the
     picker never produces because every result carries its own.
     """
     global _warm_stage
+
     if _database() is not None:
         _warm_stage = "ready"
         return
-    _warm_stage = "building city index in memory (no precomputed file)"
+
+    try:
+        _warm_stage = "compiling city index"
+        from .place_index import build
+
+        build(_writable_index_path())
+        if _database() is not None:
+            _warm_stage = "ready"
+            return
+        log.warning("compiled index was not usable; falling back to memory")
+    except Exception:  # noqa: BLE001 - never take the worker down for this
+        log.exception("could not compile the city index; falling back to memory")
+
+    _warm_stage = "building city index in memory"
     _index()
     _warm_stage = "ready"
+
+
+def _writable_index_path() -> str:
+    """Where the compiled index can actually be written.
+
+    The repository directory is writable on every platform we run on, but a
+    read-only filesystem should degrade to a temp file rather than to the
+    139 MB in-memory path.
+    """
+    global INDEX_PATH
+    directory = os.path.dirname(os.path.abspath(INDEX_PATH))
+    try:
+        os.makedirs(directory, exist_ok=True)
+        if os.access(directory, os.W_OK):
+            return INDEX_PATH
+    except OSError:
+        pass
+    import tempfile
+
+    INDEX_PATH = os.path.join(tempfile.gettempdir(), "northstar-places.sqlite")
+    return INDEX_PATH
 
 
 def _build_index() -> tuple[list[Place], dict[str, list[int]]]:
