@@ -214,6 +214,51 @@ def test_the_compile_releases_an_index_a_request_already_built(cold, monkeypatch
     assert places._index_cache is None, "stale in-memory index was not released"
 
 
+def test_a_request_in_the_gap_before_the_warm_thread_starts_still_waits(cold):
+    """The window between claiming the warm-up and the thread reaching it.
+
+    _wait_for_compile only holds a request back once the stage says a compile
+    is running, so a request landing before the thread got that far used to
+    skip the wait and build its own 139 MB index. The deployed worker was found
+    holding one alongside an open compiled database because of this.
+    """
+    # Count the in-memory builds rather than inspecting _index_cache at the
+    # end: warm() clears it once the compiled file is ready, so by the time the
+    # threads are joined the evidence of a wasted build is gone.
+    builds = []
+    original = places._build_index
+    places._build_index = lambda: (builds.append(1), original())[1]
+    try:
+        places.mark_warming()      # main thread, before the warm thread starts
+
+        started = threading.Event()
+
+        def warm_later():
+            started.wait(5)
+            places.warm()
+
+        warming = threading.Thread(target=warm_later, daemon=True)
+        warming.start()
+
+        # The request lands first; the compile has not even begun.
+        def request():
+            request.result = places.search("San Fr", 3)
+        caller = threading.Thread(target=request)
+        caller.start()
+        time.sleep(0.05)
+        started.set()              # only now does the compile actually start
+
+        caller.join(timeout=90)
+        warming.join(timeout=90)
+    finally:
+        places._build_index = original
+
+    assert request.result[0].label.startswith("San Francisco, California")
+    assert not builds, (
+        "the request built its own index in the gap before the compile started"
+    )
+
+
 def test_a_forked_child_re_arms_the_warm_up(cold):
     """gunicorn --preload imports the app once and forks the workers from it.
 

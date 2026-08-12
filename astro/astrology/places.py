@@ -220,6 +220,9 @@ def warm() -> None:
 
     try:
         if _database() is not None:
+            # A request may have built one in the gap before this ran; the
+            # compiled file answers everything from here, so drop it.
+            _index_cache = None
             _warm_stage = "ready"
             return
 
@@ -260,6 +263,26 @@ def warm() -> None:
 COMPILE_WAIT_SECONDS = 75
 
 _warm_finished = threading.Event()
+
+
+def mark_warming() -> None:
+    """Claim the warm-up before its thread has started.
+
+    _wait_for_compile() only holds a request back once the stage says a compile
+    is running. Between the worker binding its port and the warm thread getting
+    that far, the stage still reads "cold", and a request landing in that
+    window skips the wait and starts its own 139 MB in-memory build. That is
+    how a deployed worker with a perfectly good compiled index open was still
+    found holding one.
+
+    Called on the main thread, before the warm thread is started, so the window
+    does not exist.
+    """
+    global _warm_stage, _warm_started
+
+    _warm_finished.clear()
+    _warm_stage = f"{COMPILING}: queued"
+    _warm_started = time.monotonic()
 
 
 def reset_after_fork() -> None:

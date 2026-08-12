@@ -610,6 +610,10 @@ def _warm_datasets() -> None:
         except Exception:  # noqa: BLE001 - never take the worker down for this
             log.exception("dataset warm-up failed; first request will build them")
 
+    # Claim the warm-up on this thread first. A request that arrives before the
+    # thread below reaches the compile would otherwise see no warm-up in
+    # progress and start its own in-memory build.
+    places.mark_warming()
     threading.Thread(target=build, name="warm-datasets", daemon=True).start()
 
 
