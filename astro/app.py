@@ -299,6 +299,7 @@ def health():
         # Whether the datasets a chart needs are loaded yet. A cold worker
         # answers this endpoint instantly while still warming in the background.
         "warm": places.is_warm(),
+        "warmStage": places.warm_stage(),
         "aiConfigured": reading.api_configured(),
         "model": reading.MODEL,
         "voice": reading.VOICE,

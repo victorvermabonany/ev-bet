@@ -24,7 +24,7 @@ import geonamescache
 from timezonefinder import TimezoneFinder
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Place:
     name: str
     country: str
@@ -90,9 +90,22 @@ def _index() -> tuple[list[Place], dict[str, list[int]]]:
     return _index_cache
 
 
+_warm_stage = "cold"
+
+
 def is_warm() -> bool:
     """True once both datasets are built and a request will not have to wait."""
     return _index_cache is not None and _tf_cache is not None
+
+
+def warm_stage() -> str:
+    """Where the background warm-up has got to.
+
+    Render's free tier runs at a fraction of a CPU, so a build that takes a
+    second locally can take far longer there. Reporting the stage turns "it is
+    hanging" into "it is on the timezone dataset".
+    """
+    return _warm_stage
 
 
 def warm() -> None:
@@ -100,8 +113,12 @@ def warm() -> None:
 
     Called at import so it happens under gunicorn too, not just `python app.py`.
     """
+    global _warm_stage
+    _warm_stage = "building city index"
     _index()
+    _warm_stage = "building timezone data"
     _timezone_finder()
+    _warm_stage = "ready"
 
 
 def _build_index() -> tuple[list[Place], dict[str, list[int]]]:
@@ -135,12 +152,21 @@ def _build_index() -> tuple[list[Place], dict[str, list[int]]]:
         index = len(places)
         places.append(place)
 
-        aliases = {place.name}
-        aliases.update(record.get("alternatenames") or [])
-        for alias in aliases:
-            if not alias:
+        # The dataset carries 353k alternate names across every script it has
+        # ever been transliterated into -- Cyrillic, Han, Arabic, Devanagari.
+        # Indexing all of them cost ~150 MB and most of the build time, to match
+        # spellings nobody types into an English form. Keeping the ASCII ones
+        # halves the index while leaving the aliases that matter (NYC, Bombay,
+        # Calcutta, Munchen) intact, and accented spellings still resolve
+        # because _normalize strips the accents anyway.
+        by_name.setdefault(_normalize(place.name), []).append(index)
+        for alias in record.get("alternatenames") or ():
+            if not alias or not alias.isascii() or not 2 <= len(alias) <= 40:
                 continue
-            by_name.setdefault(_normalize(alias), []).append(index)
+            key = _normalize(alias)
+            bucket = by_name.setdefault(key, [])
+            if not bucket or bucket[-1] != index:
+                bucket.append(index)
 
     return places, by_name
 
@@ -272,4 +298,4 @@ def resolve_moment(
 
 
 __all__ = ["Place", "ResolvedMoment", "search", "timezone_for", "resolve_moment",
-           "warm", "is_warm"]
+           "warm", "is_warm", "warm_stage"]
