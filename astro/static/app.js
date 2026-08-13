@@ -325,10 +325,13 @@
       const x = random() * width;
       const y = random() * height;
       const radius = 0.45 + random() * 1.15;
-      // Denser toward the top, where the navy wash already sits.
+      // Denser toward the top, where the wash is deepest.
       const falloff = 1 - (y / height) * 0.55;
       context.beginPath();
-      context.fillStyle = `rgba(31, 42, 68, ${(0.09 + random() * 0.13) * falloff})`;
+      // Light on dark. This drew navy dots when the app screens were cream;
+      // on the night ground a dark star is a hole, not a star. Kept faint --
+      // it sits behind body copy, so it reads as texture, not as content.
+      context.fillStyle = `rgba(205, 216, 240, ${(0.10 + random() * 0.14) * falloff})`;
       context.arc(x, y, radius, 0, Math.PI * 2);
       context.fill();
     }

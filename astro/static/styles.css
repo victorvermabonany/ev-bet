@@ -1,9 +1,14 @@
 /* Northstar — design system.
  *
- * Built to the brand kit: warm cream ground, deep charcoal text, terracotta as
- * the primary accent, deep navy as the night-sky secondary, muted gold for
+ * Built to the brand kit, on the night ground: deep navy throughout, warm
+ * off-white text, terracotta as the primary accent, muted gold for
  * confirmed/highlight states. Fraunces for headlines, Inter for reading,
  * Space Mono for anything calculated.
+ *
+ * The app used to sit on warm cream with the night sky confined to the landing
+ * hero. It now runs navy end to end, so the sky the chart is calculated from is
+ * the room you read it in rather than a banner above it. See the :root block
+ * for how the palette inverted without renaming a single token.
  *
  * The three typefaces carry a job each, and the split is the brand argument:
  * serif for voice, sans for prose, mono for numbers — so calculated data is
@@ -80,34 +85,54 @@
 }
 
 :root {
-  /* --- brand palette: these five are exact, from the kit --- */
-  --cream: #f7f1e8;
-  --ink: #2b2620;
-  --terracotta: #c1592b;
-  --navy: #1f2a44;
-  --gold: #c9a24b;
+  /* --- the night ground ---
+   *
+   * The whole app now sits on the same deep navy the landing hero opens with,
+   * so the sky is not a banner you scroll past -- it is the room. #131b2e is
+   * the exact top stop of the hero gradient, which is what lets the hero melt
+   * into the page instead of ending at a seam.
+   *
+   * The token NAMES are unchanged from the cream build on purpose. They are
+   * used ~200 times across this sheet, and renaming them to suit the new
+   * ground would have meant touching every rule to change a palette. What each
+   * one MEANS is inverted here, once, and every rule follows:
+   *
+   *   --cream / --cream-deep  page ground and the wells sunk into it
+   *   --card / --navy         surfaces raised off it
+   *   --sand / --sand-deep    the lines between them
+   *   --ink / -soft / -faint  text, brightest to quietest
+   *
+   * Every text pair below is measured, not eyeballed. The floor is WCAG AA:
+   * 4.5:1 for body text, 3:1 for large. Values in comments are the computed
+   * ratio against the page ground.
+   */
+  --cream: #131b2e;        /* page ground -- the hero's own top stop */
+  --ink: #f4efe6;          /* 14.98:1 -- warm off-white, never clinical #fff */
+  --terracotta: #e8825a;   /* 6.35:1 -- the brand hex is 2.6:1 here, unusable */
+  --navy: #243153;         /* a raised surface now, not an accent */
+  --gold: #c9a24b;         /* 6.90:1 -- the one brand colour that survives */
 
-  /* --- derived neutrals: warm-biased toward the cream, never flat grey --- */
-  --cream-deep: #efe7da;
-  --card: #fdfaf5;
-  --sand: #e4daca;
-  --sand-deep: #d3c5af;
-  --ink-soft: #6b6157;
-  /* Darkened from #9a9083, which sat at 2.8:1 on the cream -- below AA for the
-     small print it is used on (birth line, receipts, plan cadence, meta). This
-     still reads as muted and clears 4.5:1 on both the cream and the card. */
-  --ink-faint: #766c5f;
-  /* The faint tone kept for hairlines and dividers, where contrast is not a
-     legibility question. */
-  --rule-faint: #9a9083;
+  --cream-deep: #0d1423;   /* sunk below the ground: inputs, footer */
+  --card: #1c2740;
+  --sand: #2f3b59;
+  --sand-deep: #42506f;
+  --ink-soft: #c3cadb;     /* 10.45:1 */
+  --ink-faint: #9aa4bb;    /* 6.86:1 -- the quietest text, still clears AA */
+  --rule-faint: #37435e;   /* hairlines only; never carries text */
 
-  /* --- derived accent tints --- */
-  --terracotta-deep: #9e4520;
-  --terracotta-wash: #f8e7dd;
-  --navy-soft: #3a4763;
-  --navy-wash: #e8eaf0;
-  --gold-deep: #8a6520;   /* was #a8802f: 3.2:1 on cream, too low for tag text */
-  --gold-wash: #f7efdc;
+  /* --- derived accent tints ---
+   * On cream these ran darker than the brand hex so text could sit on them.
+   * On navy that is backwards: they run lighter, and dark text sits on THEM.
+   */
+  --terracotta-deep: #e2764b;  /* button fill; --ink-invert sits on it at 5.66:1 */
+  --terracotta-wash: #33201a;
+  --navy-soft: #8fa0c8;        /* the cool rail: 7.4:1, reads at 2-3px wide */
+  --navy-wash: #1b2440;
+  --gold-deep: #e0c274;        /* 9.92:1 -- gold as TEXT wants the light tint */
+  --gold-wash: #2a2312;
+
+  /* Text that sits on a bright fill (buttons, badges) rather than the ground. */
+  --ink-invert: #131b2e;
 
   --serif: 'Fraunces', 'Newsreader', Georgia, 'Times New Roman', serif;
   --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -117,15 +142,26 @@
   --radius-sm: 10px;
   --radius-pill: 999px;
 
-  --shadow: 0 1px 2px rgba(43, 38, 32, 0.04), 0 8px 26px rgba(43, 38, 32, 0.055);
-  --shadow-lift: 0 2px 6px rgba(43, 38, 32, 0.06), 0 18px 46px rgba(43, 38, 32, 0.1);
+  /* Deeper and blacker than the cream build's. A shadow tinted with the ink
+     colour is invisible on a dark ground -- depth here comes from real black
+     plus the hairline above it. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 26px rgba(0, 0, 0, 0.34);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.34), 0 18px 46px rgba(0, 0, 0, 0.46);
 
   --measure: 66ch;
 }
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Tells the browser to render everything it draws itself in dark: the date
+     and time picker indicators (black glyphs, invisible on a navy input), the
+     checkbox, the dropdown panels those inputs open, and the scrollbars.
+     Without it the only light-mode things left on the page are the ones CSS
+     cannot reach. */
+  color-scheme: dark;
+}
 
 body {
   margin: 0;
@@ -180,14 +216,18 @@ a { color: var(--terracotta-deep); }
   position: sticky;
   top: 0;
   z-index: 60;
-  background: rgba(247, 241, 232, 0.86);
-  backdrop-filter: saturate(140%) blur(10px);
+  /* Opaque enough to actually stop the page showing through. The cream build
+     ran this at 0.86 and content scrolling under it ghosted the wordmark; on a
+     dark ground the same ghosting is worse, because the page beneath is closer
+     in value to the bar than cream ever was. */
+  background: rgba(13, 20, 35, 0.94);
+  backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid transparent;
   transition: background 0.25s, border-color 0.25s;
 }
 
-/* Over the night-sky hero the nav is transparent and inverted; it resolves to
-   the cream bar once you scroll past it. */
+/* Over the hero the nav is transparent; it resolves to the bar once you scroll
+   past it. Both states are now dark, so the wordmark no longer has to flip. */
 .nav.on-sky {
   background: transparent;
   backdrop-filter: none;
@@ -222,7 +262,7 @@ a { color: var(--terracotta-deep); }
 }
 
 .wordmark svg { display: block; overflow: visible; }
-.wordmark .mark { color: var(--navy); }
+.wordmark .mark { color: var(--navy-soft); }
 
 .nav-links { display: flex; align-items: center; gap: 6px; margin-right: auto; }
 
@@ -291,7 +331,13 @@ a { color: var(--terracotta-deep); }
 .sky {
   position: relative;
   isolation: isolate;
-  background: linear-gradient(178deg, #131b2e 0%, #1f2a44 42%, #3d3a4a 74%, #7c5c50 90%, var(--cream) 100%);
+  /* Deep overhead, an ember at the horizon, then back down into the page
+     ground. The cream build ended this on cream, so the warm stop was the
+     handover; now the page is navy too, and the warmth has to resolve back to
+     the ground or it reads as a band with an edge. The last two stops do that
+     resolving, which is why they sit so close together. */
+  background: linear-gradient(178deg,
+    #0a0f1d 0%, #16203a 40%, #232c4b 66%, #3b3247 84%, #23253c 94%, var(--cream) 100%);
   /* Pull up further than the nav can ever be tall, so no strip of page ground
      shows above it. The excess sits above the document origin and is simply
      clipped — cheaper and steadier than measuring nav height in JS, which
@@ -586,17 +632,18 @@ button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  /* --terracotta-deep rather than the exact brand --terracotta. White on the
-     brand hex measures 4.44:1, just under AA for this size; the deep tint is
-     6.31:1. Scoped to buttons only -- the exact brand terracotta still carries
-     every other accent (the headline clause, links, tags, the logo mark), so
-     the palette is unchanged apart from the one place white text sits on it. */
+  /* On the cream build this was a DEEPER terracotta carrying white text, because
+     white on the brand hex is 4.44:1 -- just under AA. On the night ground the
+     fix runs the other way: a deep fill disappears into the navy, so the button
+     goes brighter and the text goes dark. #131b2e on #e2764b is 5.66:1, and the
+     button now reads as the warmest thing on the page, which is exactly what a
+     primary action should be here. */
   background: var(--terracotta-deep);
-  color: #fff;
+  color: var(--ink-invert);
   padding: 15px 32px;
   font-weight: 600;
   letter-spacing: 0.005em;
-  box-shadow: 0 2px 10px rgba(158, 69, 32, 0.24);
+  box-shadow: 0 2px 14px rgba(226, 118, 75, 0.28);
 }
 
 .btn-primary:hover:not(:disabled) { background: #8a3c1b; }
@@ -637,7 +684,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 48px 0 8px;
 }
 
-.cred { border-top: 2px solid var(--navy); padding-top: 16px; }
+.cred { border-top: 2px solid var(--navy-soft); padding-top: 16px; }
 
 .cred h4 { font-size: 18px; margin-bottom: 8px; }
 
@@ -752,7 +799,7 @@ section.block { margin-bottom: 56px; }
 /* Friction cards carry a navy rail rather than a different fill — the section
    heading already says what they are, so the marker can stay quiet. */
 .card.friction {
-  border-left: 3px solid var(--navy);
+  border-left: 3px solid var(--navy-soft);
 }
 
 .card h3 { font-size: 21px; margin-bottom: 10px; }
@@ -907,7 +954,9 @@ section.block { margin-bottom: 56px; }
 
 .next-step h3 { font-size: 21px; margin-bottom: 10px; color: var(--terracotta-deep); }
 
-.next-step p { color: #6f4530; font-size: 16.5px; }
+/* Was #6f4530 -- a dark terracotta chosen to sit on the old pale wash. On the
+   dark wash it measured 1.89:1. */
+.next-step p { color: #f0d8cb; font-size: 16.5px; }
 
 /* ---------- paywall ----------
    The free reading ends and the locked sections continue behind a blur, so the
@@ -948,12 +997,15 @@ section.block { margin-bottom: 56px; }
 .skeleton-line.short { width: 62%; }
 .skeleton-line.mid { width: 84%; }
 
+/* Fades the blurred skeletons into the page ground. These stops were the cream
+   hex, which on the night ground painted a bright white band straight across
+   the paywall -- the one screen that has to look trustworthy. */
 .locked-fade {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-              rgba(247, 241, 232, 0) 0%,
-              rgba(247, 241, 232, 0.72) 26%,
+              rgba(19, 27, 46, 0) 0%,
+              rgba(19, 27, 46, 0.72) 26%,
               var(--cream) 52%);
   pointer-events: none;
 }
@@ -1059,7 +1111,7 @@ section.block { margin-bottom: 56px; }
 
 .upsell {
   background: var(--navy);
-  color: #eae6de;
+  color: var(--ink);
   border-radius: var(--radius);
   padding: 42px 38px;
   text-align: center;
@@ -1169,8 +1221,10 @@ section.block { margin-bottom: 56px; }
 
 .notice {
   background: var(--navy-wash);
-  border: 1px solid #d2d7e2;
-  color: #35415f;
+  border: 1px solid var(--sand);
+  /* Was #35415f, a mid-navy picked to read on a pale lavender wash. On the
+     dark wash it is 1.51:1 -- the same colour family as its own background. */
+  color: var(--ink-soft);
   padding: 14px 18px;
   border-radius: var(--radius-sm);
   font-size: 14.5px;
@@ -1711,16 +1765,118 @@ body.app-sky .night { display: block; }
 main { position: relative; z-index: 2; }
 footer { position: relative; z-index: 1; }
 
-/* A whisper of deep navy at the top of the app screens, so the cream reads as
-   dawn rather than as blank paper. Stops well short of any text. */
+/* The app screens deepen toward the top rather than lightening, so the page
+   reads as sky overhead thinning to the horizon you are standing on. Darkening
+   a dark ground -- the cream build tinted it navy, which now does nothing.
+   Stops well short of any text. */
 body.app-sky::before {
   content: "";
   position: fixed;
   inset: 0 0 auto 0;
-  height: 320px;
+  height: 340px;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(31, 42, 68, 0.055), rgba(31, 42, 68, 0));
+  background: linear-gradient(180deg, rgba(6, 10, 20, 0.55), rgba(6, 10, 20, 0));
+}
+
+/* ---- charms and pull-quotes -------------------------------------------
+ *
+ * Small decorative marks that give the night ground somewhere to breathe.
+ * Every one of them is aria-hidden and purely typographic — no images, no
+ * extra requests. They carry no meaning a screen reader would miss.
+ *
+ * The restraint is deliberate: gold at low opacity, hairline weights, and
+ * never behind running text. A charm that competes with a placement value
+ * would undercut the thing the whole design is arguing for.
+ */
+
+.charm-rule {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 64px 0;
+  color: var(--gold);
+}
+
+.charm-rule::before,
+.charm-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--rule-faint), transparent);
+}
+
+.charm-rule span {
+  font-size: 17px;
+  opacity: 0.9;
+  line-height: 1;
+  /* Nudged up: the glyph's own ink sits low in its em box, so centring the box
+     leaves it visibly below the rule it is meant to sit on. */
+  transform: translateY(-1px);
+}
+
+/* A quote is a change of voice, so it gets the serif and a narrower measure
+   than the body copy around it -- short lines are what make it read as a
+   quote rather than as another paragraph. */
+.pullquote {
+  margin: 0 auto;
+  text-align: center;
+  position: relative;
+  padding: 8px 0 0;
+}
+
+.pullquote blockquote {
+  margin: 0 auto;
+  max-width: 30ch;
+  font-family: var(--serif);
+  font-size: clamp(23px, 3.1vw, 31px);
+  font-style: italic;
+  line-height: 1.34;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* The opening mark is set as a decorative flourish rather than a character in
+   the quote, so the text reads cleanly to a screen reader. */
+.pullquote blockquote::before {
+  content: "\201C";
+  display: block;
+  font-size: 2.6em;
+  line-height: 0.55;
+  color: var(--gold);
+  opacity: 0.45;
+  margin-bottom: 12px;
+}
+
+/* Deliberately NOT inside the blockquote's 30ch measure: at that width the
+   letterspaced attribution wrapped and orphaned the final "ii" of the act and
+   scene onto a line of its own. */
+.pullquote cite {
+  display: block;
+  margin-top: 20px;
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 13px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-wrap: balance;
+}
+
+.pullquote cite em { font-style: italic; text-transform: none; letter-spacing: 0.04em; }
+
+/* The epigraph is a coda to the section it closes, not a second headline, so
+   it runs quieter than the standalone pull-quote above. */
+.pullquote.epigraph { margin: 40px auto 8px; }
+.pullquote.epigraph blockquote { font-size: clamp(19px, 2.2vw, 24px); }
+.pullquote.epigraph blockquote::before { font-size: 2.1em; opacity: 0.38; }
+.limits .pullquote.epigraph + .btn-primary,
+.pullquote.epigraph + .btn-primary { margin-top: 36px; }
+
+@media (max-width: 620px) {
+  .charm-rule { margin: 44px 0; }
+  .pullquote { max-width: 24ch; }
 }
 
 /* ---- Navy-accented section labels ------------------------------------- */
@@ -1732,15 +1888,16 @@ body.app-sky::before {
   gap: 9px;
 }
 
-/* A four-point star on the section rule — the same mark as the wordmark,
-   at label scale. */
+/* A four-point star on the section rule — the same mark as the wordmark, at
+   label scale. Gold on the night ground: the cool tone it used on cream now
+   sits too close in value to the label text beside it. */
 .block-label::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   flex-shrink: 0;
-  background: var(--navy-soft);
-  opacity: 0.55;
+  background: var(--gold);
+  opacity: 0.85;
   clip-path: polygon(50% 0%, 71% 29%, 100% 50%, 71% 71%, 50% 100%, 29% 71%, 0% 50%, 29% 29%);
 }
 
@@ -1748,7 +1905,7 @@ body.app-sky::before {
   content: "";
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, rgba(58, 71, 99, 0.22), rgba(58, 71, 99, 0.04));
+  background: linear-gradient(90deg, var(--sand), transparent);
 }
 
 /* ---- Folded reading sections ------------------------------------------
@@ -1850,12 +2007,14 @@ body.app-sky::before {
 }
 
 /* The inline code chip sat at 1.41:1 inside the offline notice -- present but
-   not readable. Given its own surface and ink. */
+   not readable. Given its own surface and ink. On the night ground the pale
+   chip inverted the problem instead of fixing it: near-white ink on a
+   near-white chip, 1.04:1. Both halves now come from the dark palette. */
 .notice code,
 code {
   color: var(--ink);
   /* Opaque rather than a translucent tint: the chip sits on several different
      surfaces, and a fixed pair is the only way its contrast is knowable. */
-  background: #e9ebf1;
-  border-color: #cfd5e0;
+  background: #2b3757;
+  border-color: var(--sand-deep);
 }
