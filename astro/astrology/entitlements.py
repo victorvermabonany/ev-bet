@@ -137,6 +137,35 @@ def _resolve_db_path() -> str:
         return fallback
 
 
+def storage_is_durable() -> bool:
+    """Whether the operator has asserted that grants survive a restart.
+
+    This is an assertion rather than a check, because it cannot be checked. A
+    mounted disk and the container's own ephemeral filesystem are both just
+    writable directories: _resolve_db_path() creates ASTRO_DB_PATH, succeeds,
+    and has no way to tell that the data will be gone on the next deploy. The
+    fallback warning above only fires when the path is *unwritable*, which on
+    Render it never is -- the process runs as root, so /var/data is created
+    happily and the service reports itself healthy while every grant it writes
+    is temporary.
+
+    That is the worst shape a failure can have: silent, delayed, and landing on
+    paying customers rather than on us. So durability has to be declared, and
+    the app says loudly when money is on the line and nobody has declared it.
+    """
+    return os.environ.get("ASTRO_STORAGE_DURABLE", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def storage_status() -> dict:
+    """What the grants table is sitting on, for /health and the boot check."""
+    return {
+        "path": _resolve_db_path(),
+        "durable": storage_is_durable(),
+    }
+
+
 def _connect() -> sqlite3.Connection:
     global _connection
     if _connection is None:

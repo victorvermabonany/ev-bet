@@ -304,6 +304,9 @@ def health():
         "model": reading.MODEL,
         "voice": reading.VOICE,
         "whopConfigured": whop_config()["configured"],
+        # False means grants are on storage nobody has vouched for. Harmless
+        # while checkout is off; a countdown to silent access loss once it is on.
+        "entitlementsDurable": entitlements.storage_is_durable(),
         **(_warm_diagnosis() if request.args.get("deep") else {}),
     })
 
@@ -585,6 +588,35 @@ def api_config():
 
 
 entitlements.init()
+
+
+def _check_payment_readiness() -> None:
+    """Refuse to be quiet about taking money onto disposable storage.
+
+    Checkout being configured means real cards are being charged. If nobody has
+    asserted that the grants table survives a restart, every one of those
+    customers loses access at the next deploy or idle spin-down, and they find
+    out before we do -- the service reports itself healthy throughout, because
+    from inside the container an ephemeral directory looks exactly like a
+    mounted disk.
+
+    Warned rather than refused: the service still works, and taking it down
+    over a configuration choice would be a worse outcome than saying so.
+    """
+    storage = entitlements.storage_status()
+    if whop_config()["configured"] and not storage["durable"]:
+        log.warning(
+            "CHECKOUT IS LIVE BUT ENTITLEMENT STORAGE IS NOT DECLARED DURABLE. "
+            "Grants are being written to %s. If that is a container filesystem "
+            "rather than a mounted disk, every paying customer silently loses "
+            "access on the next deploy or spin-down. Mount a disk (or move the "
+            "grants to a managed database), then set ASTRO_STORAGE_DURABLE=1 "
+            "to acknowledge it and clear this warning.",
+            storage["path"],
+        )
+
+
+_check_payment_readiness()
 
 
 def _warm_datasets() -> None:

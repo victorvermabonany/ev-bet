@@ -537,3 +537,49 @@ def test_legacy_grants_table_is_migrated(tmp_path, monkeypatch):
         os.environ["ASTRO_DB_PATH"] = original_path
         importlib.reload(entitlements)
         entitlements.init()
+
+
+# --- storage durability -------------------------------------------------
+#
+# The grants table decides who has paid. On Render's free plan it lands on the
+# container filesystem, which is rebuilt on every deploy and every spin-down
+# after 15 minutes idle -- so paying customers silently lose access, and the
+# service reports itself healthy the whole time.
+
+
+def test_durability_is_off_unless_declared(monkeypatch):
+    monkeypatch.delenv("ASTRO_STORAGE_DURABLE", raising=False)
+    assert entitlements.storage_is_durable() is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+def test_durability_accepts_the_usual_affirmatives(monkeypatch, value):
+    monkeypatch.setenv("ASTRO_STORAGE_DURABLE", value)
+    assert entitlements.storage_is_durable() is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "", "maybe"])
+def test_durability_is_not_granted_by_a_vague_value(monkeypatch, value):
+    monkeypatch.setenv("ASTRO_STORAGE_DURABLE", value)
+    assert entitlements.storage_is_durable() is False
+
+
+def test_a_writable_ephemeral_path_does_not_imply_durability(monkeypatch, tmp_path):
+    """The failure this exists to catch.
+
+    _resolve_db_path only warns when the path is UNWRITABLE. On Render the
+    process runs as root, so /var/data is created happily and nothing is
+    logged -- a writable directory is not evidence of a mounted disk.
+    """
+    target = tmp_path / "var" / "data" / "entitlements.db"
+    monkeypatch.setattr(entitlements, "DB_PATH", str(target))
+    monkeypatch.delenv("ASTRO_STORAGE_DURABLE", raising=False)
+
+    assert entitlements._resolve_db_path() == str(target)   # succeeds silently
+    assert os.path.isdir(target.parent)                      # it even made the dir
+    assert entitlements.storage_is_durable() is False        # and still not durable
+
+
+def test_health_reports_durability(client):
+    body = client.get("/health").get_json()
+    assert "entitlementsDurable" in body

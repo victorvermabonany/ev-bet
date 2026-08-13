@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import os
 import re
 import sys
@@ -602,3 +603,44 @@ def test_exact_name_still_beats_a_bigger_alias_match():
     results = places.search("San Francisco", 5)
     assert results[0].name == "San Francisco"
     assert results[0].admin == "California"
+
+
+def test_the_boot_check_warns_when_checkout_is_live_on_undeclared_storage(monkeypatch, caplog):
+    """Taking cards onto storage nobody has vouched for must not be silent.
+
+    From inside the container an ephemeral directory is indistinguishable from
+    a mounted disk, so this cannot be detected -- only declared. The warning is
+    the only thing standing between a launch and every customer quietly losing
+    access at the next deploy.
+    """
+    import app as app_module
+
+    monkeypatch.setattr(app_module, "whop_config", lambda: {"configured": True})
+    monkeypatch.delenv("ASTRO_STORAGE_DURABLE", raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        app_module._check_payment_readiness()
+    assert "CHECKOUT IS LIVE" in caplog.text
+
+
+def test_the_boot_check_is_quiet_once_durability_is_declared(monkeypatch, caplog):
+    import app as app_module
+
+    monkeypatch.setattr(app_module, "whop_config", lambda: {"configured": True})
+    monkeypatch.setenv("ASTRO_STORAGE_DURABLE", "1")
+
+    with caplog.at_level(logging.WARNING):
+        app_module._check_payment_readiness()
+    assert "CHECKOUT IS LIVE" not in caplog.text
+
+
+def test_the_boot_check_is_quiet_while_checkout_is_off(monkeypatch, caplog):
+    """No checkout, no money, nothing to lose."""
+    import app as app_module
+
+    monkeypatch.setattr(app_module, "whop_config", lambda: {"configured": False})
+    monkeypatch.delenv("ASTRO_STORAGE_DURABLE", raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        app_module._check_payment_readiness()
+    assert "CHECKOUT IS LIVE" not in caplog.text

@@ -55,6 +55,15 @@ services:
       # (see the disk note below) — it resets whenever the service restarts.
       - key: ASTRO_DB_PATH
         value: /var/data/entitlements.db
+      # Set to 1 ONLY once ASTRO_DB_PATH is genuinely on a mounted disk (or the
+      # grants have moved to a managed database). The app cannot check this for
+      # itself: from inside the container an ephemeral directory and a mount
+      # are both just writable paths, so it creates the file, succeeds, and
+      # reports healthy while every grant it writes is temporary. Leaving this
+      # unset makes the app say so loudly at boot once checkout is configured.
+      # Do not set it to silence the warning — set it because it is true.
+      - key: ASTRO_STORAGE_DURABLE
+        sync: false
 
     # Persistent storage for the grants table.
     #

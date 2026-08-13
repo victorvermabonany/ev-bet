@@ -502,9 +502,26 @@ a guessed token both stay free; and a `went_invalid` event revokes access.
 ### Before this handles real money
 
 The grants table is SQLite at `ASTRO_DB_PATH`. **Render's free plan has an
-ephemeral filesystem**, so it is wiped on every deploy and restart — paying
-customers would silently lose access. Attach a persistent disk, or point the
-app at managed Postgres, before launch.
+ephemeral filesystem**, so it is wiped on every deploy and on every spin-down
+after ~15 minutes idle — paying customers would silently lose access. Attach a
+persistent disk, or point the app at managed Postgres, before launch.
+
+The app cannot detect this for itself. From inside the container a mounted disk
+and an ephemeral directory are both just writable paths: it creates
+`ASTRO_DB_PATH`, succeeds, and reports itself healthy while every grant it
+writes is temporary. (The fallback warning in `_resolve_db_path` only fires when
+the path is *unwritable*, which under Render's root process it never is.)
+
+So durability is **declared, not detected**. Once the storage is genuinely
+persistent, set `ASTRO_STORAGE_DURABLE=1`. Until then, any boot with checkout
+configured logs:
+
+```
+CHECKOUT IS LIVE BUT ENTITLEMENT STORAGE IS NOT DECLARED DURABLE.
+```
+
+`/health` carries the same signal as `entitlementsDurable`. Set the flag because
+it is true, not to clear the warning.
 
 ## Configuration
 
@@ -521,6 +538,7 @@ app at managed Postgres, before launch.
 | `WHOP_API_KEY` | — | **Required for real checkout** — creates the checkout configuration that carries the session token |
 | `WHOP_WEBHOOK_SECRET` | — | **Required to grant access** — HMAC secret for `/api/whop/webhook`. Unset means every webhook is rejected |
 | `ASTRO_DB_PATH` | `entitlements.db` | SQLite file holding membership grants. Must be on a persistent disk in production |
+| `ASTRO_STORAGE_DURABLE` | — | Set to `1` once `ASTRO_DB_PATH` is genuinely persistent. Cannot be detected, only declared — see above |
 | `PORT` | `5001` | Server port |
 
 Point Whop's webhook at `https://<your-host>/api/whop/webhook` and subscribe to
