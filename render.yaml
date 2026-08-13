@@ -1,0 +1,83 @@
+# Render blueprint for the Northstar career-astrology app (astro/).
+#
+# This does NOT touch the existing ev-bet service. That service was created
+# manually in the Render dashboard and keeps using the root Procfile; a
+# blueprint only ever affects services you explicitly create from it. The two
+# run side by side as separate services off the same repo.
+#
+# To deploy: Render dashboard -> New -> Blueprint -> pick this repo and the
+# branch, then Apply. Set ANTHROPIC_API_KEY on the service afterwards if you
+# want the AI reading; without it the app still calculates every chart and
+# falls back to its built-in template reader.
+
+services:
+  - type: web
+    name: northstar-astro
+    runtime: python
+    plan: free
+    branch: claude/career-astrology-app-sgt5t7
+    rootDir: astro
+    # Just the install. The city index is precomputed and committed at
+    # data/places.sqlite, so there is nothing to generate here -- and a build
+    # step that can fail is a build step that can take the whole deploy down,
+    # which is what generating it here appears to have done. Regenerate it with
+    # scripts/build_place_index.py and commit the result.
+    buildCommand: pip install -r requirements.txt
+    # One worker, not two. With the index precomputed the process is far
+    # lighter than it was (~139 MB of it went away), but a chart still costs
+    # real CPU and the free instance only has a fraction of a core, so a second
+    # worker would contend rather than help. Threads give concurrency instead;
+    # the ephemeris calls are serialised behind a lock anyway.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # All of these are set in the dashboard, not here — never commit a key.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Required before the webhook will grant anyone access. With this unset
+      # the endpoint fails closed and rejects every event, which is the safe
+      # default but means nobody can ever unlock.
+      - key: WHOP_WEBHOOK_SECRET
+        sync: false
+      # Only needed for real checkout: the server creates the checkout
+      # configuration that carries the session token into the purchase.
+      - key: WHOP_API_KEY
+        sync: false
+      - key: WHOP_WEEKLY_PLAN_ID
+        sync: false
+      - key: WHOP_ANNUAL_PLAN_ID
+        sync: false
+      - key: WHOP_PRODUCT_ID
+        sync: false
+      # Where the entitlement grants live. On the free plan this is ephemeral
+      # (see the disk note below) — it resets whenever the service restarts.
+      - key: ASTRO_DB_PATH
+        value: /var/data/entitlements.db
+      # Set to 1 ONLY once ASTRO_DB_PATH is genuinely on a mounted disk (or the
+      # grants have moved to a managed database). The app cannot check this for
+      # itself: from inside the container an ephemeral directory and a mount
+      # are both just writable paths, so it creates the file, succeeds, and
+      # reports healthy while every grant it writes is temporary. Leaving this
+      # unset makes the app say so loudly at boot once checkout is configured.
+      # Do not set it to silence the warning — set it because it is true.
+      - key: ASTRO_STORAGE_DURABLE
+        sync: false
+
+    # Persistent storage for the grants table.
+    #
+    # COMMENTED OUT because Render disks require a Starter instance ($7/mo) —
+    # a free service cannot mount one, and Apply will fail with this enabled.
+    #
+    # On the free plan the service also spins down after ~15 minutes idle, so
+    # ASTRO_DB_PATH above is wiped on every restart and redeploy. That is fine
+    # for demoing the paywall (re-send the webhook and you are paid again) and
+    # NOT fine for real customers, who would silently lose access. Before
+    # taking money: upgrade the plan and uncomment this, or move the grants to
+    # managed Postgres.
+    #
+    # disk:
+    #   name: northstar-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

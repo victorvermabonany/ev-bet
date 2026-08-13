@@ -1,0 +1,8 @@
+# Entitlement store -- local runtime state, never committed
+*.db
+*.db-journal
+
+# The city index is compiled at boot by astrology/place_index.py, not committed.
+# It is 11 MB of derived data -- checking it in made every clone and every
+# deploy carry a binary that takes 1.4 s to regenerate from geonamescache.
+data/
